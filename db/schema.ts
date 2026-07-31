@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const products = sqliteTable("products", {
   id: text("id").primaryKey(),
@@ -18,6 +18,41 @@ export const commissionProgress = sqliteTable("commission_progress", {
   cycleNumber: integer("cycle_number").notNull().default(1),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const daySessions = sqliteTable("day_sessions", {
+  id: text("id").primaryKey(),
+  businessDate: text("business_date").notNull().unique(),
+  status: text("status", { enum: ["OPEN", "CLOSED"] }).notNull(),
+  startedAt: text("started_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  closedAt: text("closed_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("one_open_day_session_idx").on(table.status).where(sql`${table.status} = 'OPEN'`),
+  check("day_session_status_check", sql`${table.status} IN ('OPEN','CLOSED')`),
+  check("day_session_closed_at_check", sql`
+    (${table.status} = 'OPEN' AND ${table.closedAt} IS NULL) OR
+    (${table.status} = 'CLOSED' AND ${table.closedAt} IS NOT NULL)
+  `),
+]);
+
+export const dayStockItems = sqliteTable("day_stock_items", {
+  id: text("id").primaryKey(),
+  daySessionId: text("day_session_id").notNull().references(() => daySessions.id),
+  productId: text("product_id").notNull().references(() => products.id),
+  pickedQuantity: integer("picked_quantity").notNull(),
+  soldQuantity: integer("sold_quantity").notNull().default(0),
+  remainingQuantity: integer("remaining_quantity").notNull(),
+  productNameSnapshot: text("product_name_snapshot").notNull(),
+  unitPricePaiseSnapshot: integer("unit_price_paise_snapshot").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("day_stock_session_product_idx").on(table.daySessionId, table.productId),
+  check("day_stock_picked_check", sql`${table.pickedQuantity} >= 0`),
+  check("day_stock_sold_check", sql`${table.soldQuantity} >= 0 AND ${table.soldQuantity} <= ${table.pickedQuantity}`),
+  check("day_stock_remaining_check", sql`${table.remainingQuantity} >= 0 AND ${table.remainingQuantity} = ${table.pickedQuantity} - ${table.soldQuantity}`),
+]);
 
 export const sales = sqliteTable("sales", {
   id: text("id").primaryKey(),
@@ -39,6 +74,15 @@ export const sales = sqliteTable("sales", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   uniqueIndex("sales_idempotency_key_idx").on(table.idempotencyKey),
+]);
+
+export const daySessionSales = sqliteTable("day_session_sales", {
+  saleId: text("sale_id").primaryKey().references(() => sales.id),
+  daySessionId: text("day_session_id").notNull().references(() => daySessions.id),
+  businessDate: text("business_date").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("day_session_sales_session_idx").on(table.daySessionId, table.createdAt),
 ]);
 
 export const fullCommissionRewards = sqliteTable("full_commission_rewards", {

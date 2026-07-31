@@ -5,6 +5,8 @@ export interface RealtimeService {
   subscribeToProductProgress(onChange: () => void): UnsubscribeFunction;
   subscribeToFullCommissions(onChange: () => void): UnsubscribeFunction;
   subscribeToDayClosures(onChange: () => void): UnsubscribeFunction;
+  subscribeToDaySessions(onChange: () => void): UnsubscribeFunction;
+  subscribeToDailyStock(onChange: () => void): UnsubscribeFunction;
 }
 
 /**
@@ -21,4 +23,6 @@ export class PollingRealtimeService implements RealtimeService {
   subscribeToProductProgress = (onChange: () => void) => this.subscribe(onChange);
   subscribeToFullCommissions = (onChange: () => void) => this.subscribe(onChange);
   subscribeToDayClosures = (onChange: () => void) => this.subscribe(onChange);
+  subscribeToDaySessions = (onChange: () => void) => this.subscribe(onChange);
+  subscribeToDailyStock = (onChange: () => void) => this.subscribe(onChange);
 }

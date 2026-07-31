@@ -8,6 +8,21 @@ Every product has an independent cycle. Sales 1–12 earn Normal Commission. Whe
 
 Money is stored as integer paise. The pure calculation service is in `src/domain/commission.ts`.
 
+## Trusted time and manual business days
+
+All authoritative timestamps come from the database in UTC. The `/api/time` boundary reads database time, and the browser calculates a display-only offset that updates once per second without requesting the server every second. It resynchronizes every five minutes, after reconnect, and when the app returns from the background. The configured display/business timezone is `Asia/Kolkata`.
+
+A calendar change performs no business mutation. It shows a warning only. The user must:
+
+1. close any older open day manually;
+2. open **Start New Day**;
+3. enter new product-wise picked quantities;
+4. confirm the new day.
+
+`day_sessions` and `day_stock_items` hold daily state. `commission_progress` remains independent and persistent across midnight, Day Close, Start New Day, restarts, and deployments.
+
+Sales require an open session for the current Business Date. Server-side validation rejects unpicked products and quantities above remaining stock. The stock decrement, sale snapshot, reward creation, progress update, and audit entry are committed together. Supabase uses row/advisory locks; the hosted D1 adapter uses a transactional batch plus database checks that prohibit negative remaining stock.
+
 | Product | Price | Normal Commission | Full Commission |
 | --- | ---: | ---: | ---: |
 | Ghee 500 ML | ₹500 | ₹50 | ₹500 |
@@ -37,6 +52,7 @@ Key folders:
 
 - `app/`: pages and provider-neutral API boundary
 - `src/domain/`: deterministic money and commission rules
+- `src/domain/business-time.ts`: centralized Business Date, formatting, offset, and duration rules
 - `src/application/`: DTOs and authoritative summary calculations
 - `src/repositories/`: provider-neutral repository interfaces
 - `src/infrastructure/`: database and Realtime adapters
@@ -92,7 +108,9 @@ The migration:
 - publishes sales, progress, rewards, and day closures to Supabase Realtime;
 - protects each product/salesman cycle with a transaction-scoped advisory lock;
 - returns an existing sale for the same salesman/idempotency key;
-- creates the sale, rewards, progress update, and audit log in one transaction.
+- creates the sale, daily stock update, rewards, progress update, and audit log in one transaction;
+- provides server-timestamped `start_day_atomic` and `close_day_atomic` operations;
+- prevents duplicate dates and more than one open session per salesman.
 
 ### Realtime
 
@@ -150,6 +168,9 @@ The application contains no persistent business data on the local filesystem, no
 - server-side Zod validation and authoritative product/rule lookup;
 - UUID idempotency keys;
 - transaction-protected Supabase sale RPC with row/advisory locking;
+- database-generated UTC Day Start, Sale, Reward, Audit, and Day Close timestamps;
+- manual midnight transition with no automatic financial or stock mutations;
+- daily stock constraints separated from persistent commission progress;
 - historical price/rule snapshots;
 - RLS on all Supabase business tables;
 - server-safe error messages and audit events;
