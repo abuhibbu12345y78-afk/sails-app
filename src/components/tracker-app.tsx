@@ -217,7 +217,7 @@ function Header({ state }: { state: TrackerState }) {
 
 function TimeCard({ state, clock, trustedTime, compact = false }: TimeProps & { compact?: boolean }) {
   return <section className={`time-card${compact ? " compact" : ""}`}>
-    <div><p className="business-date">{clock.formatDate(trustedTime)}</p><p className="live-time">{clock.formatTime(trustedTime)} <span>IST</span></p></div>
+    <div><p className="business-date">{clock.formatDate(trustedTime)}</p><p className="live-time">{clock.formatTime(trustedTime, false)}</p></div>
     <div className="time-meta">
       <span className={`sync-dot${clock.synchronized ? " online" : ""}`} />
       {clock.synchronized ? "Server time synchronized" : <><CloudOff size={14} /> Time not synchronized</>}
@@ -231,7 +231,7 @@ function HomeSummaryCard({ state, clock, trustedTime, money }: TimeProps & { mon
     <div className="home-summary-time">
       <div>
         <p className="business-date">{clock.formatDate(trustedTime)}</p>
-        <p className="live-time">{clock.formatTime(trustedTime)} <span>IST</span></p>
+        <p className="live-time">{clock.formatTime(trustedTime, false)}</p>
       </div>
       <div className="home-summary-meta">
         <div className="time-meta">

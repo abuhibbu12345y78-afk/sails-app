@@ -79,8 +79,8 @@ button:focus-visible, input:focus-visible {
 .home-summary-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .7rem; }
 .home-summary-divider { height: 1px; margin: .75rem 0; background: color-mix(in srgb, var(--primary-foreground) 22%, transparent); }
 .home-summary-card .business-date, .home-summary-card .live-time { color: inherit; }
-.home-summary-card .business-date { font-size: clamp(.95rem, 3.8vw, 1.1rem); }
-.home-summary-card .live-time { margin-top: .15rem; font-size: clamp(1.55rem, 7vw, 1.9rem); }
+.home-summary-card .business-date { font-size: clamp(1.3rem, 5vw, 1.55rem); }
+.home-summary-card .live-time { margin-top: .15rem; font-size: clamp(1.25rem, 5.5vw, 1.6rem); }
 .home-summary-card .live-time span, .home-summary-card .time-meta { color: inherit; opacity: .78; }
 .home-summary-card .sync-dot { background: color-mix(in srgb, var(--destructive) 80%, white); }
 .home-summary-card .sync-dot.online { background: color-mix(in srgb, var(--accent) 70%, white); }
@@ -186,8 +186,8 @@ button:focus-visible, input:focus-visible {
 .filter-button.active { color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
 .time-card { display: grid; gap: .75rem; margin-bottom: 1rem; padding: 1.05rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); box-shadow: 0 4px 18px rgba(20,36,28,.04); }
 .time-card.compact { grid-template-columns: 1fr auto; align-items: center; }
-.business-date { margin: 0; font-size: clamp(1rem, 4vw, 1.25rem); font-weight: 800; letter-spacing: -.025em; }
-.live-time { margin: .28rem 0 0; font-size: clamp(1.35rem, 7vw, 2rem); font-weight: 820; color: var(--primary); letter-spacing: -.035em; }
+.business-date { margin: 0; font-size: clamp(1.2rem, 4.5vw, 1.45rem); font-weight: 800; letter-spacing: -.025em; }
+.live-time { margin: .28rem 0 0; font-size: clamp(1.15rem, 5vw, 1.55rem); font-weight: 820; color: var(--primary); letter-spacing: -.035em; }
 .live-time span { font-size: .72em; color: var(--muted-foreground); }
 .time-meta { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted-foreground); font-size: .73rem; }
 .sync-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--destructive); }
