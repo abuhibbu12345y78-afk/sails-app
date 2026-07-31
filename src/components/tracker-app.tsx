@@ -242,8 +242,10 @@ function HomeSummaryCard({ state, clock, trustedTime, money }: TimeProps & { mon
     </div>
     <div className="home-summary-divider" />
     <div className="home-summary-earnings">
-      <p className="hero-label">Session earnings</p>
-      <h2 className="hero-value">{money(state.dashboard.totalEarningsPaise)}</h2>
+      <div>
+        <p className="hero-label">Session earnings</p>
+        <h2 className="hero-value">{money(state.dashboard.totalEarningsPaise)}</h2>
+      </div>
       <p className="hero-foot"><Sparkles size={17} /> From {state.dashboard.totalUnits} unit{state.dashboard.totalUnits === 1 ? "" : "s"} in this business day</p>
     </div>
   </section>;

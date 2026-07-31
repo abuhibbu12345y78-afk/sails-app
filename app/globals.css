@@ -71,18 +71,23 @@ button:focus-visible, input:focus-visible {
 .hero-label { margin: 0 0 .4rem; opacity: .78; font-weight: 650; }
 .hero-value { position: relative; z-index: 1; margin: 0; font-size: clamp(2rem, 10vw, 3.6rem); letter-spacing: -.06em; line-height: 1; }
 .hero-foot { display: flex; align-items: center; gap: .45rem; margin: 1rem 0 0; opacity: .88; font-size: .92rem; }
-.home-summary-card { position: relative; overflow: hidden; margin-bottom: 1rem; padding: 1.2rem; border-radius: calc(var(--radius) + .35rem); background: var(--primary); color: var(--primary-foreground); box-shadow: var(--shadow); }
-.home-summary-card::after { content: ""; position: absolute; width: 12rem; height: 12rem; right: -4rem; bottom: -5rem; border-radius: 50%; background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.home-summary-card { position: relative; overflow: hidden; margin-bottom: 1rem; padding: 1rem; border-radius: calc(var(--radius) + .2rem); background: var(--primary); color: var(--primary-foreground); box-shadow: var(--shadow); }
+.home-summary-card::after { content: ""; position: absolute; width: 8.5rem; height: 8.5rem; right: -3rem; bottom: -4rem; border-radius: 50%; background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .home-summary-time, .home-summary-divider, .home-summary-earnings { position: relative; z-index: 1; }
-.home-summary-time { display: grid; gap: .8rem; }
-.home-summary-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem .85rem; }
-.home-summary-divider { height: 1px; margin: 1.05rem 0; background: color-mix(in srgb, var(--primary-foreground) 22%, transparent); }
+.home-summary-time { display: grid; gap: .55rem; }
+.home-summary-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .7rem; }
+.home-summary-divider { height: 1px; margin: .75rem 0; background: color-mix(in srgb, var(--primary-foreground) 22%, transparent); }
 .home-summary-card .business-date, .home-summary-card .live-time { color: inherit; }
+.home-summary-card .business-date { font-size: clamp(.95rem, 3.8vw, 1.1rem); }
+.home-summary-card .live-time { margin-top: .15rem; font-size: clamp(1.55rem, 7vw, 1.9rem); }
 .home-summary-card .live-time span, .home-summary-card .time-meta { color: inherit; opacity: .78; }
 .home-summary-card .sync-dot { background: color-mix(in srgb, var(--destructive) 80%, white); }
 .home-summary-card .sync-dot.online { background: color-mix(in srgb, var(--accent) 70%, white); }
-.home-summary-card .session-badge { background: color-mix(in srgb, var(--primary-foreground) 16%, transparent); color: inherit; }
-.home-summary-card .hero-foot { max-width: 28rem; }
+.home-summary-card .session-badge { padding: .3rem .55rem; background: color-mix(in srgb, var(--primary-foreground) 16%, transparent); color: inherit; }
+.home-summary-earnings { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: .8rem; }
+.home-summary-earnings .hero-label { margin-bottom: .2rem; font-size: .82rem; }
+.home-summary-earnings .hero-value { font-size: clamp(2rem, 9vw, 2.7rem); }
+.home-summary-card .hero-foot { justify-self: end; max-width: 14rem; margin: 0; font-size: .78rem; line-height: 1.35; }
 .section-head { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin: 1.65rem 0 .85rem; }
 .section-head h2 { margin: 0; font-size: 1.18rem; letter-spacing: -.02em; }
 .section-head p { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .9rem; }
