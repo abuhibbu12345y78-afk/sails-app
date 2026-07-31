@@ -73,6 +73,7 @@ export async function POST() {
       businessDate: String(session.business_date),
     }, { status: 201 });
   } catch (error) {
+    console.error("DAY_CLOSE_FAILED", error);
     return Response.json({ error: friendlyDatabaseError(error) }, { status: 500 });
   }
 }
