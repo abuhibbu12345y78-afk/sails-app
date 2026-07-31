@@ -14,6 +14,7 @@ test("replaces the starter with the Commission Compass product", async () => {
   assert.match(page, /<TrackerApp \/>/);
   assert.match(layout, /Commission Compass/);
   assert.match(layout, /og\.png/);
+  assert.match(layout, /<body[^>]*suppressHydrationWarning/);
   assert.match(app, /Record a Sale/);
   assert.match(app, /Full Commission/);
   assert.match(app, /Day Close/);
