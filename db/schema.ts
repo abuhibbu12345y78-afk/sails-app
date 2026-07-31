@@ -36,6 +36,17 @@ export const daySessions = sqliteTable("day_sessions", {
   `),
 ]);
 
+export const daySessionScopes = sqliteTable("day_session_scopes", {
+  daySessionId: text("day_session_id").primaryKey().references(() => daySessions.id),
+  tenantId: text("tenant_id").notNull().default("default"),
+  companyId: text("company_id").notNull().default("default"),
+  salesmanId: text("salesman_id").notNull().default("default"),
+  businessDate: text("business_date").notNull(),
+}, (table) => [
+  uniqueIndex("day_session_scope_business_date_idx")
+    .on(table.tenantId, table.companyId, table.salesmanId, table.businessDate),
+]);
+
 export const dayStockItems = sqliteTable("day_stock_items", {
   id: text("id").primaryKey(),
   daySessionId: text("day_session_id").notNull().references(() => daySessions.id),
@@ -107,6 +118,57 @@ export const dayClosures = sqliteTable("day_closures", {
   reportText: text("report_text").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const dayCloseSnapshots = sqliteTable("day_close_snapshots", {
+  id: text("id").primaryKey(),
+  daySessionId: text("day_session_id").notNull().references(() => daySessions.id),
+  businessDate: text("business_date").notNull(),
+  closureVersion: integer("closure_version").notNull(),
+  status: text("status", { enum: ["ACTIVE", "SUPERSEDED"] }).notNull().default("ACTIVE"),
+  totalUnits: integer("total_units").notNull(),
+  grossSalesPaise: integer("gross_sales_paise").notNull(),
+  totalNormalCommissionPaise: integer("total_normal_commission_paise").notNull(),
+  totalOfferEarningsPaise: integer("total_offer_earnings_paise").notNull(),
+  totalEarningsPaise: integer("total_earnings_paise").notNull(),
+  netCollectionPaise: integer("net_collection_paise").notNull(),
+  snapshotJson: text("snapshot_json").notNull(),
+  reportText: text("report_text").notNull(),
+  whatsappReportStatus: text("whatsapp_report_status", { enum: ["CURRENT", "OUTDATED"] }).notNull().default("CURRENT"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("day_close_snapshot_version_idx").on(table.daySessionId, table.closureVersion),
+  index("day_close_snapshot_active_idx").on(table.daySessionId, table.status),
+]);
+
+export const dayReopens = sqliteTable("day_reopens", {
+  id: text("id").primaryKey(),
+  daySessionId: text("day_session_id").notNull().references(() => daySessions.id),
+  reopenCount: integer("reopen_count").notNull(),
+  reopenReason: text("reopen_reason").notNull(),
+  reopenedBy: text("reopened_by").notNull(),
+  originalClosedAt: text("original_closed_at").notNull(),
+  reopenedAt: text("reopened_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("day_reopen_count_idx").on(table.daySessionId, table.reopenCount),
+]);
+
+export const dayStockAdjustments = sqliteTable("day_stock_adjustments", {
+  id: text("id").primaryKey(),
+  daySessionId: text("day_session_id").notNull().references(() => daySessions.id),
+  productId: text("product_id").notNull().references(() => products.id),
+  adjustmentType: text("adjustment_type", { enum: ["ADDITIONAL_PICKUP"] }).notNull(),
+  quantity: integer("quantity").notNull(),
+  previousPickedQuantity: integer("previous_picked_quantity").notNull(),
+  newPickedQuantity: integer("new_picked_quantity").notNull(),
+  previousRemainingQuantity: integer("previous_remaining_quantity").notNull(),
+  newRemainingQuantity: integer("new_remaining_quantity").notNull(),
+  reason: text("reason").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("day_stock_adjustment_session_idx").on(table.daySessionId, table.createdAt),
+  check("day_stock_adjustment_quantity_check", sql`${table.quantity} > 0`),
+]);
 
 export const settings = sqliteTable("settings", {
   id: text("id").primaryKey().default("default"),

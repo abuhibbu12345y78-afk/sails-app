@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("replaces the starter with the Commission Compass product", async () => {
+test("renders the AL QUWWA Business Day product", async () => {
   const [page, layout, app, css, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
@@ -12,14 +12,19 @@ test("replaces the starter with the Commission Compass product", async () => {
   ]);
 
   assert.match(page, /<TrackerApp \/>/);
-  assert.match(layout, /Commission Compass/);
+  assert.match(layout, /AL QUWWA/);
   assert.match(layout, /og\.png/);
   assert.match(layout, /<body[^>]*suppressHydrationWarning/);
   assert.match(app, /Record a Sale/);
-  assert.match(app, /Full Commission/);
+  assert.match(app, /Offers Earned/);
   assert.match(app, /Day Close/);
-  assert.match(app, /Start New Day/);
-  assert.match(app, /Previous Day Is Still Open/);
+  assert.match(app, /Daily Product Pickup/);
+  assert.match(app, /Previous Business Day Is Still Open/);
+  assert.match(app, /Previous Business Day Is Still Open/);
+  assert.match(app, /OPEN NEW DAY/);
+  assert.match(app, /REOPEN CURRENT DAY/);
+  assert.match(app, /CONFIRM ADDITIONAL PICKUP/);
+  assert.match(app, /AlertDialogContent/);
   assert.match(app, /Server time synchronized/);
   assert.match(app, /home-summary-card/);
   assert.match(app, /\/profile\.webp/);

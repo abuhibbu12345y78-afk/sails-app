@@ -23,6 +23,12 @@ const schemaStatements = [
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS one_open_day_session_idx ON day_sessions(status) WHERE status = 'OPEN'`,
+  `CREATE TABLE IF NOT EXISTS day_session_scopes (
+    day_session_id TEXT PRIMARY KEY REFERENCES day_sessions(id),
+    tenant_id TEXT NOT NULL DEFAULT 'default', company_id TEXT NOT NULL DEFAULT 'default',
+    salesman_id TEXT NOT NULL DEFAULT 'default', business_date TEXT NOT NULL,
+    UNIQUE(tenant_id, company_id, salesman_id, business_date)
+  )`,
   `CREATE TABLE IF NOT EXISTS day_stock_items (
     id TEXT PRIMARY KEY, day_session_id TEXT NOT NULL REFERENCES day_sessions(id),
     product_id TEXT NOT NULL REFERENCES products(id), picked_quantity INTEGER NOT NULL CHECK(picked_quantity >= 0),
@@ -61,6 +67,34 @@ const schemaStatements = [
     net_collection_paise INTEGER NOT NULL, report_text TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS day_close_snapshots (
+    id TEXT PRIMARY KEY, day_session_id TEXT NOT NULL REFERENCES day_sessions(id), business_date TEXT NOT NULL,
+    closure_version INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','SUPERSEDED')),
+    total_units INTEGER NOT NULL, gross_sales_paise INTEGER NOT NULL,
+    total_normal_commission_paise INTEGER NOT NULL, total_offer_earnings_paise INTEGER NOT NULL,
+    total_earnings_paise INTEGER NOT NULL, net_collection_paise INTEGER NOT NULL,
+    snapshot_json TEXT NOT NULL, report_text TEXT NOT NULL,
+    whatsapp_report_status TEXT NOT NULL DEFAULT 'CURRENT' CHECK(whatsapp_report_status IN ('CURRENT','OUTDATED')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(day_session_id, closure_version)
+  )`,
+  `CREATE INDEX IF NOT EXISTS day_close_snapshot_active_idx ON day_close_snapshots(day_session_id, status)`,
+  `CREATE TABLE IF NOT EXISTS day_reopens (
+    id TEXT PRIMARY KEY, day_session_id TEXT NOT NULL REFERENCES day_sessions(id),
+    reopen_count INTEGER NOT NULL, reopen_reason TEXT NOT NULL, reopened_by TEXT NOT NULL,
+    original_closed_at TEXT NOT NULL, reopened_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(day_session_id, reopen_count)
+  )`,
+  `CREATE TABLE IF NOT EXISTS day_stock_adjustments (
+    id TEXT PRIMARY KEY, day_session_id TEXT NOT NULL REFERENCES day_sessions(id),
+    product_id TEXT NOT NULL REFERENCES products(id),
+    adjustment_type TEXT NOT NULL CHECK(adjustment_type = 'ADDITIONAL_PICKUP'),
+    quantity INTEGER NOT NULL CHECK(quantity > 0),
+    previous_picked_quantity INTEGER NOT NULL, new_picked_quantity INTEGER NOT NULL,
+    previous_remaining_quantity INTEGER NOT NULL, new_remaining_quantity INTEGER NOT NULL,
+    reason TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS day_stock_adjustment_session_idx ON day_stock_adjustments(day_session_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS settings (
     id TEXT PRIMARY KEY, salesman_name TEXT NOT NULL, business_name TEXT NOT NULL,
     whatsapp_number TEXT NOT NULL, currency TEXT NOT NULL, locale TEXT NOT NULL,
@@ -88,8 +122,20 @@ export async function ensureDatabase() {
     db.prepare(
       `INSERT OR IGNORE INTO settings
       (id, salesman_name, business_name, whatsapp_number, currency, locale, timezone, realtime_enabled)
-      VALUES ('default', 'Salesman', 'Sales Commission', '', 'INR', 'en-IN', '${DEFAULT_BUSINESS_TIMEZONE}', 1)`
+      VALUES ('default', 'Salesman', 'AL QUWWA', '', 'INR', 'en-IN', '${DEFAULT_BUSINESS_TIMEZONE}', 1)`
     ),
+    db.prepare(`INSERT OR IGNORE INTO day_session_scopes
+      (day_session_id, tenant_id, company_id, salesman_id, business_date)
+      SELECT id, 'default', 'default', 'default', business_date FROM day_sessions`),
+    db.prepare(`INSERT OR IGNORE INTO day_close_snapshots
+      (id, day_session_id, business_date, closure_version, status, total_units, gross_sales_paise,
+      total_normal_commission_paise, total_offer_earnings_paise, total_earnings_paise,
+      net_collection_paise, snapshot_json, report_text, whatsapp_report_status, created_at)
+      SELECT dc.id, ds.id, dc.business_date, 1, 'ACTIVE', dc.total_units, dc.gross_sales_paise,
+      dc.total_normal_commission_paise, dc.total_full_commission_paise, dc.total_earnings_paise,
+      dc.net_collection_paise, '{"legacy":true}', dc.report_text, 'CURRENT', dc.created_at
+      FROM day_closures dc JOIN day_sessions ds ON ds.business_date = dc.business_date`),
+    db.prepare("UPDATE settings SET business_name = 'AL QUWWA' WHERE id = 'default' AND business_name = 'Sales Commission'"),
   ]);
   initialized = true;
   return db;
@@ -120,6 +166,8 @@ export function friendlyDatabaseError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("UNIQUE") && message.includes("idempotency")) return "This sale was already saved.";
   if (message.includes("UNIQUE") && message.includes("day_sessions.status")) return "A previous business day is still open.";
+  if (message.includes("UNIQUE") && message.includes("day_session_scopes")) return "This Business Date already has a session.";
+  if (message.includes("UNIQUE") && message.includes("day_close_snapshots")) return "This close operation was already completed.";
   if (message.includes("UNIQUE") && message.includes("business_date")) return "This business date already exists.";
   if (message.includes("CHECK constraint failed")) return "The requested quantity is greater than the remaining stock.";
   return "We could not complete that request. Please try again.";

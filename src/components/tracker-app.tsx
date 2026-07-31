@@ -18,8 +18,12 @@ import { calculateSale, formatCurrency } from "../domain/commission";
 import { isDateChangeWarning } from "../domain/day-session";
 import type { Product } from "../domain/products";
 import { useTrustedClock } from "../hooks/use-trusted-clock";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "./ui/alert-dialog";
 
-type Screen = "home" | "start-day" | "sale" | "dashboard" | "rewards" | "history" | "day-close" | "settings";
+type Screen = "home" | "start-day" | "additional-pickup" | "sale" | "dashboard" | "rewards" | "history" | "day-close" | "settings";
 type ToastState = { message: string; error?: boolean } | null;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -163,16 +167,17 @@ export function TrackerApp() {
   return (
     <div className="app-shell">
       <main className="content">
-        {screen === "home" && <HomeScreen {...timeProps} state={state} money={money} navigate={navigate} dateChanged={dateChanged} />}
+        {screen === "home" && <HomeScreen {...timeProps} state={state} money={money} navigate={navigate} dateChanged={dateChanged} reload={load} showToast={setToast} />}
         {screen === "start-day" && <StartDayScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
+        {screen === "additional-pickup" && <AdditionalPickupScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "sale" && <SaleScreen state={state} money={money} navigate={navigate} openSale={openSale} dateChanged={dateChanged} />}
         {screen === "dashboard" && <DashboardScreen {...timeProps} state={state} money={money} navigate={navigate} />}
         {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
-        {screen === "history" && <HistoryScreen sales={state.sales} money={money} navigate={navigate} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
+        {screen === "history" && <HistoryScreen sales={state.historySales} money={money} navigate={navigate} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
         {screen === "day-close" && <DayCloseScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "settings" && <SettingsScreen settings={state.settings} navigate={navigate} reload={load} showToast={setToast} />}
       </main>
-      <BottomNav screen={screen} navigate={navigate} />
+      {state.daySessionStatus === "OPEN" && screen !== "additional-pickup" && <BottomNav screen={screen} navigate={navigate} />}
       {selectedProduct && preview && selectedStock && (
         <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !saving) setSelectedProduct(null);
@@ -192,7 +197,7 @@ export function TrackerApp() {
             <div className="review">
               <div className="review-row"><span>Gross Sales</span><strong>{money(preview.grossSalesPaise)}</strong></div>
               <div className="review-row"><span>Normal Commission ({preview.normalUnits})</span><strong>{money(preview.totalNormalCommissionPaise)}</strong></div>
-              <div className="review-row"><span>Full Commission ({preview.fullUnits})</span><strong>{money(preview.totalFullCommissionPaise)}</strong></div>
+              <div className="review-row"><span>Offers Earned ({preview.fullUnits})</span><strong>{money(preview.totalFullCommissionPaise)}</strong></div>
               <div className="review-row total"><span>Total Earnings</span><strong>{money(preview.totalEarningsPaise)}</strong></div>
               <div className="review-row"><span>Net Collection</span><strong>{money(preview.netCollectionPaise)}</strong></div>
               <div className="review-row"><span>Final Commission Progress</span><strong>{preview.finalProgress} / {selectedProduct.rewardThreshold}</strong></div>
@@ -255,18 +260,191 @@ function HomeSummaryCard({ state, clock, trustedTime, money }: TimeProps & { mon
 function PreviousDayWarning({ state, navigate, money, formatTime }: { state: TrackerState; navigate: (screen: Screen) => void; money: (value: number) => string; formatTime: (date: Date) => string }) {
   if (!state.daySession || state.daySessionStatus !== "PREVIOUS_DAY_STILL_OPEN") return null;
   return <section className="warning-card">
-    <div className="warning-title"><AlertTriangle size={22} /><div><h2>Previous Day Is Still Open</h2><p>{state.daySession.businessDate} · Started {formatTime(new Date(state.daySession.startedAt))}. Close it before starting a new business day.</p></div></div>
+    <div className="warning-title"><AlertTriangle size={22} /><div><h2>Previous Business Day Is Still Open</h2><p>{state.daySession.businessDate} · Started {formatTime(new Date(state.daySession.startedAt))}. Close it before starting a new business day.</p></div></div>
     <div className="stock-summary">{state.daySession.stockItems.map((item) => <div key={item.id}><strong>{item.productName}</strong><span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span></div>)}</div>
-    <div className="warning-finance"><span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span><span>Normal Commission <strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></span><span>Full Commission <strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></span><span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span><span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span></div>
+    <div className="warning-finance"><span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span><span>Normal Commission <strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></span><span>Offers Earned <strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></span><span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span><span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span></div>
     <div className="warning-actions"><button className="secondary-button" onClick={() => navigate("dashboard")}>View Previous Day</button><button className="danger-button" onClick={() => navigate("day-close")}>Close Previous Day</button></div>
   </section>;
 }
 
-function HomeScreen({ state, clock, trustedTime, money, navigate, dateChanged }: TimeProps & { money: (value: number) => string; navigate: (screen: Screen) => void; dateChanged: boolean }) {
+function PreviousOpenLanding({ state, clock, trustedTime, money, navigate }: TimeProps & {
+  money: (value: number) => string;
+  navigate: (screen: Screen) => void;
+}) {
+  const session = state.daySession;
+  if (!session) return null;
+  return <div className="decision-screen">
+    <p className="landing-brand">AL QUWWA</p>
+    <section className="warning-card blocking-warning">
+      <div className="warning-title"><AlertTriangle size={28} /><div>
+        <h1>Previous Business Day Is Still Open</h1>
+        <p>Close this Business Day manually before opening {clock.formatDate(trustedTime)}.</p>
+      </div></div>
+      <div className="session-timing compact-grid">
+        <div><span>Previous Business Date</span><strong>{session.businessDate}</strong></div>
+        <div><span>Day Start</span><strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></div>
+      </div>
+      <div className="stock-summary detailed-stock">{session.stockItems.map((item) => <div key={item.id}>
+        <strong>{item.productName}</strong>
+        <span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span>
+      </div>)}</div>
+      <div className="warning-finance">
+        <span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span>
+        <span>Normal Commission <strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></span>
+        <span>Offers Earned <strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></span>
+        <span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span>
+        <span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span>
+      </div>
+      <div className="warning-actions">
+        <button className="secondary-button" onClick={() => navigate("dashboard")}>VIEW PREVIOUS DAY</button>
+        <button className="danger-button" onClick={() => navigate("day-close")}>CLOSE PREVIOUS DAY</button>
+      </div>
+    </section>
+  </div>;
+}
+
+function NewDayLanding({ state, clock, trustedTime, navigate }: TimeProps & { navigate: (screen: Screen) => void }) {
+  return <div className="new-day-landing">
+    <div className="landing-mark"><CalendarCheck size={28} /></div>
+    <p className="landing-brand">AL QUWWA</p>
+    <h1>{clock.formatDate(trustedTime)}</h1>
+    <p className="landing-time">{clock.formatTime(trustedTime, false)}</p>
+    <div className="time-meta landing-sync"><span className={`sync-dot${clock.synchronized ? " online" : ""}`} />{clock.synchronized ? "Server time synchronized" : "Waiting for trusted server time"}</div>
+    <p className="landing-message">No business day has been started today.</p>
+    <button className="primary-button landing-primary" disabled={!clock.synchronized || state.daySessionStatus !== "NOT_STARTED"} onClick={() => navigate("start-day")}>
+      <Play size={22} /> OPEN NEW DAY
+    </button>
+  </div>;
+}
+
+function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, showToast }: TimeProps & {
+  money: (value: number) => string;
+  navigate: (screen: Screen) => void;
+  reload: (silent?: boolean) => Promise<void>;
+  showToast: (toast: ToastState) => void;
+}) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [reopening, setReopening] = useState(false);
+  const session = state.daySession;
+  if (!session) return null;
+  const sessionId = session.id;
+
+  function openWhatsAppReport() {
+    const report = state.dayCloseSnapshot?.reportText;
+    if (!report) {
+      showToast({ message: "The WhatsApp report is unavailable.", error: true });
+      return;
+    }
+    const phone = state.settings.whatsappNumber.replace(/\D/g, "");
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(report)}`, "_blank", "noopener,noreferrer");
+    } else {
+      void navigator.clipboard.writeText(report);
+      showToast({ message: "WhatsApp number is not configured. Report copied instead." });
+    }
+  }
+
+  async function reopenDay() {
+    if (!state.reopenEligibility.allowed || reason.trim().length < 8 || reopening) return;
+    setReopening(true);
+    try {
+      await api("/api/day-reopen", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, reason: reason.trim() }),
+      });
+      await reload(true);
+      setDialogOpen(false);
+      showToast({ message: "Current Business Day reopened. Add any additional picked items." });
+      navigate("additional-pickup");
+    } catch (reopenError) {
+      showToast({ message: reopenError instanceof Error ? reopenError.message : "The Business Day could not be reopened.", error: true });
+    } finally {
+      setReopening(false);
+    }
+  }
+
+  return <div className="decision-screen">
+    <p className="landing-brand">AL QUWWA</p>
+    <TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
+    <section className="closed-day-card">
+      <div className="closed-day-heading"><CalendarCheck size={25} /><div><h1>Business Day Closed</h1><p>Another session cannot be created for {session.businessDate}.</p></div></div>
+      <div className="session-timing compact-grid">
+        <div><span>Business Date</span><strong>{session.businessDate}</strong></div>
+        <div><span>Started</span><strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></div>
+        <div><span>Closed</span><strong>{session.closedAt ? clock.formatTime(new Date(session.closedAt), false) : "—"}</strong></div>
+        <div><span>Reopened</span><strong>{session.reopenCount} time{session.reopenCount === 1 ? "" : "s"}</strong></div>
+      </div>
+      <div className="stock-summary detailed-stock">{session.stockItems.map((item) => <div key={item.id}>
+        <strong>{item.productName}</strong><span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span>
+      </div>)}</div>
+      <div className="warning-finance">
+        <span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span>
+        <span>Normal Commission <strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></span>
+        <span>Offers Earned <strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></span>
+        <span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span>
+        <span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span>
+      </div>
+      <div className="closed-actions">
+        <button className="secondary-button" onClick={() => navigate("dashboard")}>VIEW DAY SUMMARY</button>
+        <button className="secondary-button" onClick={openWhatsAppReport}>OPEN WHATSAPP REPORT</button>
+        {state.reopenEligibility.allowed && <button className="primary-button" onClick={() => setDialogOpen(true)}>REOPEN CURRENT DAY</button>}
+      </div>
+      {!state.reopenEligibility.allowed && state.reopenEligibility.reason && <p className="eligibility-note">{state.reopenEligibility.reason}</p>}
+    </section>
+    <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Reopen Current Business Day?</AlertDialogTitle>
+          <AlertDialogDescription>This Business Day has already been closed. Reopening it will allow additional product pickup and new sales. Existing records remain unchanged; the previous close summary and WhatsApp report become outdated.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="dialog-summary">
+          <span>Business Date <strong>{session.businessDate}</strong></span>
+          <span>Original Start <strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></span>
+          <span>Original Close <strong>{session.closedAt ? clock.formatTime(new Date(session.closedAt), false) : "—"}</strong></span>
+          <span>Total Picked <strong>{session.stockItems.reduce((sum, item) => sum + item.pickedQuantity, 0)}</strong></span>
+          <span>Total Sold <strong>{state.dashboard.totalUnits}</strong></span>
+          <span>Total Remaining <strong>{session.stockItems.reduce((sum, item) => sum + item.remainingQuantity, 0)}</strong></span>
+          <span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span>
+          <span>Normal Commission <strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></span>
+          <span>Offers Earned <strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></span>
+          <span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span>
+          <span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span>
+        </div>
+        <label className="dialog-field">Mandatory reopen reason
+          <textarea value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} placeholder="Why must this Business Day be reopened?" />
+        </label>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={reopening}>CANCEL</AlertDialogCancel>
+          <AlertDialogAction disabled={reason.trim().length < 8 || reopening} onClick={(event) => { event.preventDefault(); void reopenDay(); }}>
+            {reopening ? "REOPENING…" : "REOPEN CURRENT DAY"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </div>;
+}
+
+function HomeScreen({ state, clock, trustedTime, money, navigate, dateChanged, reload, showToast }: TimeProps & {
+  money: (value: number) => string;
+  navigate: (screen: Screen) => void;
+  dateChanged: boolean;
+  reload: (silent?: boolean) => Promise<void>;
+  showToast: (toast: ToastState) => void;
+}) {
+  if (state.openingState === "PREVIOUS_OPEN") {
+    return <PreviousOpenLanding state={state} clock={clock} trustedTime={trustedTime} money={money} navigate={navigate} />;
+  }
+  if (state.openingState === "NEW_DAY") {
+    return <NewDayLanding state={state} clock={clock} trustedTime={trustedTime} navigate={navigate} />;
+  }
+  if (state.openingState === "CURRENT_CLOSED") {
+    return <ClosedDayLanding state={state} clock={clock} trustedTime={trustedTime} money={money} navigate={navigate} reload={reload} showToast={showToast} />;
+  }
   const actions = [
     { screen: "sale" as const, icon: ShoppingBag, title: "Sale", text: state.daySessionStatus === "OPEN" ? "Record a product sale" : "Start a day before selling" },
     { screen: "dashboard" as const, icon: BarChart3, title: "Dashboard", text: "See session totals" },
-    { screen: "rewards" as const, icon: Trophy, title: "Full Commission", text: "Review full earnings" },
+    { screen: "rewards" as const, icon: Trophy, title: "Offers", text: "Review earned Offers" },
     { screen: "history" as const, icon: History, title: "History", text: "Open session sales" },
   ];
   return <>
@@ -274,8 +452,6 @@ function HomeScreen({ state, clock, trustedTime, money, navigate, dateChanged }:
     <HomeSummaryCard state={state} clock={clock} trustedTime={trustedTime} money={money} />
     {dateChanged && state.daySessionStatus === "OPEN" && <section className="warning-card"><div className="warning-title"><AlertTriangle size={22} /><div><h2>The calendar date has changed</h2><p>The previous business day remains open and unchanged. Close {state.daySession?.businessDate} before starting the new day.</p></div></div><div className="warning-actions"><button className="secondary-button" onClick={() => navigate("dashboard")}>View Previous Day</button><button className="danger-button" onClick={() => navigate("day-close")}>Close Previous Day</button></div></section>}
     <PreviousDayWarning state={state} navigate={navigate} money={money} formatTime={(date) => clock.formatTime(date, false)} />
-    {state.daySessionStatus === "NOT_STARTED" && <button className="start-day-callout" onClick={() => navigate("start-day")}><span className="icon-tile"><Play size={22} /></span><span><strong>Start New Day</strong><small>Enter today’s picked quantities</small></span><ChevronRight /></button>}
-    {state.daySessionStatus === "CLOSED" && <section className="info-card"><CalendarCheck size={22} /><div><strong>Business day closed</strong><p>A new day will not start automatically. Start it manually after the calendar date changes.</p></div></section>}
     <section className="home-actions">
       <div className="section-head"><div><h2>What would you like to do?</h2><p>Choose an action to get started.</p></div></div>
       <div className="action-grid">{actions.map(({ screen, icon: Icon, title, text }) =>
@@ -295,11 +471,14 @@ function PageTitle({ title, navigate }: { title: string; navigate: (screen: Scre
 function StartDayScreen({ state, clock, trustedTime, navigate, reload, showToast }: TimeProps & { navigate: (screen: Screen) => void; reload: (silent?: boolean) => Promise<void>; showToast: (toast: ToastState) => void }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [starting, setStarting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const canStart = state.daySessionStatus === "NOT_STARTED";
+  const selectedItems = state.products
+    .map((product) => ({ product, quantity: quantities[product.id] ?? 0 }))
+    .filter((item) => item.quantity > 0);
+  const totalPickedUnits = selectedItems.reduce((total, item) => total + item.quantity, 0);
   async function startDay() {
     if (!canStart || !clock.synchronized) return;
-    const dateLabel = clock.formatDate(trustedTime);
-    if (!window.confirm(`Start the business day for ${dateLabel}? Picked quantities cannot be copied automatically.`)) return;
     setStarting(true);
     try {
       await api("/api/day-start", {
@@ -307,20 +486,119 @@ function StartDayScreen({ state, clock, trustedTime, navigate, reload, showToast
         body: JSON.stringify({ items: state.products.map((product) => ({ productId: product.id, pickedQuantity: quantities[product.id] ?? 0 })) }),
       });
       await reload(true);
+      setConfirmOpen(false);
       showToast({ message: "Business day started with server-confirmed time." });
-      navigate("sale");
+      navigate("home");
     } catch (startError) {
       showToast({ message: startError instanceof Error ? startError.message : "The business day could not be started.", error: true });
     } finally { setStarting(false); }
   }
-  return <><PageTitle title="Start New Day" navigate={navigate} /><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
+  return <><PageTitle title="Daily Product Pickup" navigate={navigate} /><p className="landing-brand">AL QUWWA</p><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
     {!canStart && <section className="warning-card"><div className="warning-title"><AlertTriangle /><div><h2>New day unavailable</h2><p>{state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" ? "Close the previous day first." : "This business date has already been started."}</p></div></div></section>}
     <div className="section-head"><div><h2>Select today’s picked quantities</h2><p>Products left at 0 are not picked today.</p></div></div>
     <div className="pickup-list">{state.products.map((product) => {
       const value = quantities[product.id] ?? 0;
       return <article className="pickup-card" key={product.id}><div><strong>{product.name}</strong><span>Commission progress continues at {product.progress} / {product.rewardThreshold}</span></div><div className="mini-quantity"><button aria-label={`Decrease ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.max(0, value - 1) })}><Minus /></button><strong>{value}</strong><button aria-label={`Increase ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.min(9999, value + 1) })}><Plus /></button></div></article>;
     })}</div>
-    <button className="primary-button full-width sticky-action" disabled={!canStart || !clock.synchronized || starting} onClick={() => void startDay()}><Play size={19} />{starting ? "Starting…" : clock.synchronized ? "Confirm & Start Day" : "Waiting for trusted time"}</button>
+    <button className="primary-button full-width sticky-action" disabled={!canStart || !clock.synchronized || starting} onClick={() => setConfirmOpen(true)}><Play size={19} />{clock.synchronized ? "CONFIRM & START DAY" : "Waiting for trusted time"}</button>
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Confirm & Start Day?</AlertDialogTitle>
+          <AlertDialogDescription>A new Business Day will be created only after this confirmation. Previous quantities and remaining stock are not copied.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="dialog-summary">
+          <span>Business Date <strong>{clock.formatDate(trustedTime)}</strong></span>
+          <span>Products Selected <strong>{selectedItems.length}</strong></span>
+          <span>Total Picked Units <strong>{totalPickedUnits}</strong></span>
+        </div>
+        <div className="dialog-product-list">{selectedItems.length ? selectedItems.map(({ product, quantity }) => <span key={product.id}>{product.name}<strong>{quantity}</strong></span>) : <p>All products will start at zero picked quantity.</p>}</div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={starting}>CANCEL</AlertDialogCancel>
+          <AlertDialogAction disabled={starting} onClick={(event) => { event.preventDefault(); void startDay(); }}>{starting ? "STARTING…" : "CONFIRM & START DAY"}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>;
+}
+
+function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, showToast }: TimeProps & {
+  navigate: (screen: Screen) => void;
+  reload: (silent?: boolean) => Promise<void>;
+  showToast: (toast: ToastState) => void;
+}) {
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [reason, setReason] = useState("Additional pickup after reopening");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [savingPickup, setSavingPickup] = useState(false);
+  const session = state.daySession;
+  if (!session || session.status !== "OPEN") return <section className="warning-card"><h2>Additional pickup unavailable</h2><p>Reopen the trusted current Business Day first.</p></section>;
+  const sessionId = session.id;
+  const stockByProduct = new Map(session.stockItems.map((item) => [item.productId, item]));
+  const selected = state.products.map((product) => {
+    const stock = stockByProduct.get(product.id);
+    const additional = quantities[product.id] ?? 0;
+    return {
+      product,
+      stock,
+      additional,
+      newPicked: (stock?.pickedQuantity ?? 0) + additional,
+      newRemaining: (stock?.remainingQuantity ?? 0) + additional,
+    };
+  }).filter((item) => item.additional > 0);
+  const totalAdditional = selected.reduce((total, item) => total + item.additional, 0);
+
+  async function saveAdditionalPickup() {
+    if (savingPickup || totalAdditional < 1 || reason.trim().length < 3) return;
+    setSavingPickup(true);
+    try {
+      await api("/api/additional-pickup", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId,
+          reason: reason.trim(),
+          items: state.products.map((product) => ({
+            productId: product.id,
+            additionalQuantity: quantities[product.id] ?? 0,
+          })),
+        }),
+      });
+      await reload(true);
+      setConfirmOpen(false);
+      showToast({ message: `${totalAdditional} additional picked unit${totalAdditional === 1 ? "" : "s"} saved.` });
+      navigate("home");
+    } catch (pickupError) {
+      showToast({ message: pickupError instanceof Error ? pickupError.message : "Additional pickup could not be saved.", error: true });
+    } finally {
+      setSavingPickup(false);
+    }
+  }
+
+  return <><PageTitle title="Add Picked Items" navigate={navigate} /><p className="landing-brand">AL QUWWA</p><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
+    <div className="section-head"><div><h2>Additional Product Pickup</h2><p>Original pickup remains unchanged in history. Add only new quantities.</p></div></div>
+    <div className="pickup-list">{state.products.map((product) => {
+      const stock = stockByProduct.get(product.id);
+      const value = quantities[product.id] ?? 0;
+      return <article className="pickup-card pickup-adjustment" key={product.id}>
+        <div><strong>{product.name}</strong><span>Previously Picked: {stock?.pickedQuantity ?? 0} · Sold: {stock?.soldQuantity ?? 0} · Remaining: {stock?.remainingQuantity ?? 0}</span><span className="pickup-result">New Total Picked: {(stock?.pickedQuantity ?? 0) + value} · New Remaining: {(stock?.remainingQuantity ?? 0) + value}</span></div>
+        <div><small>Additional Pickup</small><div className="mini-quantity"><button aria-label={`Decrease additional ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.max(0, value - 1) })}><Minus /></button><strong>{value}</strong><button aria-label={`Increase additional ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.min(9999, value + 1) })}><Plus /></button></div></div>
+      </article>;
+    })}</div>
+    <label className="dialog-field pickup-reason">Pickup reason
+      <textarea value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} />
+    </label>
+    <button className="primary-button full-width sticky-action" disabled={totalAdditional < 1 || reason.trim().length < 3} onClick={() => setConfirmOpen(true)}>CONFIRM ADDITIONAL PICKUP</button>
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader><AlertDialogTitle>Confirm Additional Pickup?</AlertDialogTitle><AlertDialogDescription>Review the new quantities before saving this audited stock adjustment.</AlertDialogDescription></AlertDialogHeader>
+        <div className="dialog-summary"><span>Business Date <strong>{session.businessDate}</strong></span><span>Total Additional Units <strong>{totalAdditional}</strong></span></div>
+        <div className="dialog-product-list">{selected.map((item) => <span key={item.product.id}>{item.product.name}: +{item.additional}<strong>Picked {item.newPicked} · Remaining {item.newRemaining}</strong></span>)}</div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={savingPickup}>CANCEL</AlertDialogCancel>
+          <AlertDialogAction disabled={savingPickup} onClick={(event) => { event.preventDefault(); void saveAdditionalPickup(); }}>{savingPickup ? "SAVING…" : "CONFIRM ADDITIONAL PICKUP"}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </>;
 }
 
@@ -334,7 +612,7 @@ function SaleScreen({ state, money, navigate, openSale, dateChanged }: { state: 
       return <button className="product-card" key={product.id} disabled={unavailable} onClick={() => openSale(product)}>
         <span className="product-name">{product.name}</span><span className="product-price">{money(product.sellingPricePaise)}</span>
         <span className="product-commission">{money(product.normalCommissionPaise)} Normal Commission</span>
-        <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress === product.rewardThreshold ? <><Sparkles size={12} /> Next: Full Commission</> : <>Cycle {product.cycleNumber}</>}</span>
+        <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress === product.rewardThreshold ? <><Sparkles size={12} /> Next: Offer</> : <>Cycle {product.cycleNumber}</>}</span>
         <span className="stock-line">{stock ? `Picked ${stock.pickedQuantity} · Sold ${stock.soldQuantity} · Left ${stock.remainingQuantity}` : "Not prepared"}</span>
         <span className="progress-row"><span>Commission Progress</span><strong>{product.progress} / {product.rewardThreshold}</strong></span>
         <span className="progress-track"><span className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></span>
@@ -347,7 +625,7 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate }: TimePro
     { label: "Units Sold", value: String(state.dashboard.totalUnits), icon: ShoppingBag },
     { label: "Gross Sales", value: money(state.dashboard.grossSalesPaise), icon: ReceiptIndianRupee },
     { label: "Normal Commission", value: money(state.dashboard.totalNormalCommissionPaise), icon: WalletCards },
-    { label: "Full Commission", value: money(state.dashboard.totalFullCommissionPaise), icon: Trophy },
+    { label: "Offers Earned", value: money(state.dashboard.totalFullCommissionPaise), icon: Trophy },
     { label: "Total Earnings", value: money(state.dashboard.totalEarningsPaise), icon: IndianRupee, featured: true },
     { label: "Net Collection", value: money(state.dashboard.netCollectionPaise), icon: Package },
   ];
@@ -363,33 +641,37 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate }: TimePro
 
 function RewardsScreen({ state, money, navigate, formatTimestamp }: { state: TrackerState; money: (value: number) => string; navigate: (screen: Screen) => void; formatTimestamp: (value: string) => string }) {
   const total = state.rewards.reduce((sum, reward) => sum + reward.amountPaise, 0);
-  return <><PageTitle title="Full Commission" navigate={navigate} /><section className="hero"><p className="hero-label">Session Full Commission</p><h2 className="hero-value">{money(total)}</h2><p className="hero-foot"><Trophy size={17} /> {state.rewards.length} earned record{state.rewards.length === 1 ? "" : "s"}</p></section>
-    <div className="section-head"><div><h2>Commission Records</h2><p>Persistent history remains in the database.</p></div></div>
-    {state.rewards.length ? <div className="list">{state.rewards.map((reward) => <article className="list-card" key={reward.id}><div className="list-row"><div><h3>{reward.productName}</h3><p>{formatTimestamp(reward.createdAt)} · Cycle {reward.cycleNumber}</p></div><div className="list-amount">{money(reward.amountPaise)}</div></div></article>)}</div> : <Empty icon={Trophy} text="No Full Commission earned in this session." />}</>;
+  return <><PageTitle title="Offers" navigate={navigate} /><section className="hero"><p className="hero-label">Session Offers Earned</p><h2 className="hero-value">{money(total)}</h2><p className="hero-foot"><Trophy size={17} /> {state.rewards.length} earned Offer record{state.rewards.length === 1 ? "" : "s"}</p></section>
+    <div className="section-head"><div><h2>Offer Records</h2><p>Persistent history remains in the database.</p></div></div>
+    {state.rewards.length ? <div className="list">{state.rewards.map((reward) => <article className="list-card" key={reward.id}><div className="list-row"><div><h3>{reward.productName}</h3><p>{formatTimestamp(reward.createdAt)} · Cycle {reward.cycleNumber}</p></div><div className="list-amount">{money(reward.amountPaise)}</div></div></article>)}</div> : <Empty icon={Trophy} text="No Offers earned in this session." />}</>;
 }
 
 function HistoryScreen({ sales, money, navigate, formatTimestamp }: { sales: SaleRecord[]; money: (value: number) => string; navigate: (screen: Screen) => void; formatTimestamp: (value: string) => string }) {
-  return <><PageTitle title="Sales History" navigate={navigate} /><div className="section-head"><div><h2>Current Business Day</h2><p>{sales.length} recent record{sales.length === 1 ? "" : "s"}</p></div></div>
-    {sales.length ? <div className="list">{sales.map((sale) => <article className="list-card" key={sale.id}><div className="list-row"><div><h3>{sale.productName}</h3><p>{formatTimestamp(sale.createdAt)} · Qty {sale.quantity}</p></div><div className="list-amount">{money(sale.grossSalesPaise)}<p>Gross Sales</p></div></div><div className="list-details"><div><span>Normal ({sale.normalUnits})</span><strong>{money(sale.totalNormalCommissionPaise)}</strong></div><div><span>Full ({sale.fullUnits})</span><strong>{money(sale.totalFullCommissionPaise)}</strong></div><div><span>Net Collection</span><strong>{money(sale.netCollectionPaise)}</strong></div></div></article>)}</div> : <Empty icon={History} text="No sales have been recorded for this business day." />}</>;
+  return <><PageTitle title="Sales History" navigate={navigate} /><div className="section-head"><div><h2>All Business Days</h2><p>{sales.length} preserved record{sales.length === 1 ? "" : "s"}</p></div></div>
+    {sales.length ? <div className="list">{sales.map((sale) => <article className="list-card" key={sale.id}><div className="list-row"><div><h3>{sale.productName}</h3><p>{sale.businessDate ? `${sale.businessDate} · ` : ""}{formatTimestamp(sale.createdAt)} · Qty {sale.quantity}</p></div><div className="list-amount">{money(sale.grossSalesPaise)}<p>Gross Sales</p></div></div><div className="list-details"><div><span>Normal ({sale.normalUnits})</span><strong>{money(sale.totalNormalCommissionPaise)}</strong></div><div><span>Offer ({sale.fullUnits})</span><strong>{money(sale.totalFullCommissionPaise)}</strong></div><div><span>Net Collection</span><strong>{money(sale.netCollectionPaise)}</strong></div></div></article>)}</div> : <Empty icon={History} text="No sales have been recorded." />}</>;
 }
 
 function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, showToast }: TimeProps & { money: (value: number) => string; navigate: (screen: Screen) => void; reload: (silent?: boolean) => Promise<void>; showToast: (toast: ToastState) => void }) {
   const [closing, setClosing] = useState(false);
   const [report, setReport] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmedCloseTime, setConfirmedCloseTime] = useState<string | null>(state.daySession?.closedAt ?? null);
   const startedAt = state.daySession ? new Date(state.daySession.startedAt) : null;
   const durationEnd = confirmedCloseTime ? new Date(confirmedCloseTime) : trustedTime;
   async function closeDay() {
     if (!state.daySession || state.daySession.status !== "OPEN" || !clock.synchronized) return;
-    if (!window.confirm(`Close business day ${state.daySession.businessDate}? No further sales can be added.`)) return;
     setClosing(true);
     try {
-      const result = await api<{ reportText: string; whatsappNumber: string; closedAt: string }>("/api/day-close", { method: "POST" });
+      const result = await api<{ reportText: string; whatsappNumber: string; closedAt: string }>("/api/day-close", {
+        method: "POST",
+        body: JSON.stringify({ sessionId: state.daySession.id }),
+      });
       setReport(result.reportText);
       setConfirmedCloseTime(result.closedAt);
       await reload(true);
+      setConfirmOpen(false);
       showToast({ message: "Business day closed with server-confirmed time." });
-      if (result.whatsappNumber) window.open(`https://wa.me/${result.whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(result.reportText)}`, "_blank", "noopener,noreferrer");
+      navigate("home");
     } catch (closeError) {
       showToast({ message: closeError instanceof Error ? closeError.message : "Day Close failed.", error: true });
     } finally { setClosing(false); }
@@ -401,9 +683,29 @@ function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, sh
   return <><PageTitle title="Day Close" navigate={navigate} /><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
     {state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" && <PreviousDayWarning state={state} navigate={navigate} money={money} formatTime={(date) => clock.formatTime(date, false)} />}
     <section className="session-timing"><div><span>Business Date</span><strong>{state.daySession?.businessDate ?? "Not started"}</strong></div><div><span>Started</span><strong>{startedAt ? clock.formatTime(startedAt, false) : "—"}</strong></div><div><span>Current Time</span><strong>{clock.formatTime(trustedTime, false)}</strong></div><div><span>Closed</span><strong>{confirmedCloseTime ? clock.formatTime(new Date(confirmedCloseTime), false) : "Not closed"}</strong></div><div><span>Working Duration</span><strong>{startedAt ? formatWorkingDuration(startedAt, durationEnd) : "—"}</strong></div></section>
-    <section className="close-summary"><h2>Session summary</h2><div className="review-row"><span>Units Sold</span><strong>{state.dashboard.totalUnits}</strong></div><div className="review-row"><span>Gross Sales</span><strong>{money(state.dashboard.grossSalesPaise)}</strong></div><div className="review-row"><span>Normal Commission</span><strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></div><div className="review-row"><span>Full Commission</span><strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></div><div className="review-row"><span>Total Earnings</span><strong>{money(state.dashboard.totalEarningsPaise)}</strong></div><div className="review-row"><span>Net Collection</span><strong>{money(state.dashboard.netCollectionPaise)}</strong></div></section>
+    <div className="section-head"><div><h2>Product-wise stock review</h2><p>Review every picked, sold, and remaining quantity.</p></div></div>
+    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><h3>{item.productName}</h3><span className="badge">{item.remainingQuantity} remaining</span></div><div className="stock-strip"><span>Picked <strong>{item.pickedQuantity}</strong></span><span>Sold <strong>{item.soldQuantity}</strong></span><span>Remaining <strong>{item.remainingQuantity}</strong></span></div></article>)}</div>
+    <section className="close-summary"><h2>Session summary</h2><div className="review-row"><span>Total Units Sold</span><strong>{state.dashboard.totalUnits}</strong></div><div className="review-row"><span>Gross Sales</span><strong>{money(state.dashboard.grossSalesPaise)}</strong></div><div className="review-row"><span>Normal Commission</span><strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></div><div className="review-row"><span>Offers Earned</span><strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></div><div className="review-row"><span>Total Earnings</span><strong>{money(state.dashboard.totalEarningsPaise)}</strong></div><div className="review-row"><span>Net Collection</span><strong>{money(state.dashboard.netCollectionPaise)}</strong></div></section>
     {report ? <><pre className="list-card report-text">{report}</pre><button className="secondary-button full-width" onClick={() => void copyReport()}>Copy Message</button></> :
-      <button className="primary-button full-width" disabled={closing || state.daySession?.status !== "OPEN" || !clock.synchronized} onClick={() => void closeDay()}><CalendarCheck size={20} />{state.daySession?.status === "CLOSED" ? "Day Already Closed" : closing ? "Closing…" : !clock.synchronized ? "Waiting for trusted time" : "Close Day & Prepare WhatsApp"}</button>}
+      <button className="primary-button full-width" disabled={closing || state.daySession?.status !== "OPEN" || !clock.synchronized} onClick={() => setConfirmOpen(true)}><CalendarCheck size={20} />{state.daySession?.status === "CLOSED" ? "Day Already Closed" : !clock.synchronized ? "Waiting for trusted time" : "CONTINUE TO DAY CLOSE"}</button>}
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" ? "Close Previous Business Day?" : "Close Current Business Day?"}</AlertDialogTitle>
+          <AlertDialogDescription>Review the previous day&apos;s stock and financial details before closing it. After closing, no additional sales can be added unless the day is formally reopened.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="dialog-summary">
+          <span>Business Date <strong>{state.daySession?.businessDate}</strong></span>
+          <span>Total Units Sold <strong>{state.dashboard.totalUnits}</strong></span>
+          <span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span>
+          <span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={closing}>CANCEL</AlertDialogCancel>
+          <AlertDialogAction disabled={closing} onClick={(event) => { event.preventDefault(); void closeDay(); }}>{closing ? "CLOSING…" : "CONFIRM DAY CLOSE"}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </>;
 }
 

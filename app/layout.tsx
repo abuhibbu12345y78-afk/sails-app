@@ -15,19 +15,19 @@ export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = new URL(`${protocol}://${host}`);
   return {
     metadataBase: baseUrl,
-    title: "Commission Compass — Sales Commission Tracker",
-    description: "A simple, reliable mobile sales and commission tracker.",
+    title: "AL QUWWA — Sales & Offers Tracker",
+    description: "A trusted mobile Business Day, sales, stock, and Offers tracker.",
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
     openGraph: {
-      title: "Commission Compass",
-      description: "Simple sales. Clear earnings.",
+      title: "AL QUWWA",
+      description: "Trusted Business Days. Clear sales and Offers.",
       type: "website",
-      images: [{ url: new URL("/og.png", baseUrl).toString(), width: 1200, height: 630, alt: "Commission Compass sales tracker" }],
+      images: [{ url: new URL("/og.png", baseUrl).toString(), width: 1200, height: 630, alt: "AL QUWWA sales and Offers tracker" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Commission Compass",
-      description: "Simple sales. Clear earnings.",
+      title: "AL QUWWA",
+      description: "Trusted Business Days. Clear sales and Offers.",
       images: [new URL("/og.png", baseUrl).toString()],
     },
   };

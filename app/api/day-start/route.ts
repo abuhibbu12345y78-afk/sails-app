@@ -7,6 +7,8 @@ const startDaySchema = z.object({
     productId: z.string().min(1).max(80),
     pickedQuantity: z.number().int().min(0).max(9999),
   })).max(100),
+}).refine((input) => new Set(input.items.map((item) => item.productId)).size === input.items.length, {
+  message: "Each product may appear only once.",
 });
 
 type Row = Record<string, string | number | null>;
@@ -37,8 +39,11 @@ export async function POST(request: Request) {
 
     const sessionId = crypto.randomUUID();
     await db.batch([
-      db.prepare("INSERT INTO day_sessions (id, business_date, status) VALUES (?, ?, 'OPEN')")
+      db.prepare("INSERT INTO day_sessions (id, business_date, status, started_at) VALUES (?, ?, 'OPEN', CURRENT_TIMESTAMP)")
         .bind(sessionId, time.businessDate),
+      db.prepare(`INSERT INTO day_session_scopes
+        (day_session_id, tenant_id, company_id, salesman_id, business_date)
+        VALUES (?, 'default', 'default', 'default', ?)`).bind(sessionId, time.businessDate),
       ...productResult.results.map((product) => {
         const picked = quantities.get(String(product.id)) ?? 0;
         return db.prepare(`INSERT INTO day_stock_items

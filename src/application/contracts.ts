@@ -9,6 +9,7 @@ export interface SaleRecord extends CommissionCalculationResult {
   normalCommissionPaise: number;
   fullCommissionPaise: number;
   rewardThreshold: number;
+  businessDate?: string;
   createdAt: string;
 }
 
@@ -56,10 +57,27 @@ export interface DaySession {
   status: "OPEN" | "CLOSED";
   startedAt: string;
   closedAt: string | null;
+  reopenCount: number;
   stockItems: DayStockItem[];
 }
 
 export type DaySessionStatus = "NOT_STARTED" | "OPEN" | "PREVIOUS_DAY_STILL_OPEN" | "CLOSED";
+export type OpeningState = "NEW_DAY" | "CURRENT_OPEN" | "CURRENT_CLOSED" | "PREVIOUS_OPEN";
+
+export interface DayCloseSnapshot {
+  id: string;
+  businessDate: string;
+  closureVersion: number;
+  status: "ACTIVE" | "SUPERSEDED";
+  reportText: string;
+  whatsappReportStatus: "CURRENT" | "OUTDATED";
+  createdAt: string;
+}
+
+export interface ReopenEligibility {
+  allowed: boolean;
+  reason: string | null;
+}
 
 export interface TrustedTimeState {
   serverTime: string;
@@ -77,5 +95,9 @@ export interface TrackerState {
   time: TrustedTimeState;
   daySession: DaySession | null;
   daySessionStatus: DaySessionStatus;
+  openingState: OpeningState;
+  dayCloseSnapshot: DayCloseSnapshot | null;
+  reopenEligibility: ReopenEligibility;
+  historySales: SaleRecord[];
   lastUpdatedAt: string;
 }

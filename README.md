@@ -1,10 +1,10 @@
-# Commission Compass
+# AL QUWWA
 
-Commission Compass is a mobile-first sales commission tracker for a single salesman, built so the same domain and application layers can later support multiple users, companies, clients, and database providers.
+AL QUWWA is a mobile-first Business Day, sales, stock, commission, and Offers tracker. Business Day transitions are manual and validated against trusted server time in `Asia/Kolkata`.
 
 ## Business rule
 
-Every product has an independent cycle. Sales 1–12 earn Normal Commission. When progress shows `12 / 12`, the next unit earns Full Commission equal to that product’s full-commission amount and earns no Normal Commission. The cycle then resets to `0 / 12`. Quantity is processed one unit at a time, so one sale can cross one or more cycle boundaries safely.
+Every product has an independent cycle. Sales 1–12 earn Normal Commission. When progress shows `12 / 12`, the 13th unit earns an Offer only and earns no Normal Commission. The cycle then resets to `0 / 12`. Quantity is processed one unit at a time, so one sale can cross one or more cycle boundaries safely.
 
 Money is stored as integer paise. The pure calculation service is in `src/domain/commission.ts`.
 
@@ -15,7 +15,7 @@ All authoritative timestamps come from the database in UTC. The `/api/time` boun
 A calendar change performs no business mutation. It shows a warning only. The user must:
 
 1. close any older open day manually;
-2. open **Start New Day**;
+2. select **OPEN NEW DAY**;
 3. enter new product-wise picked quantities;
 4. confirm the new day.
 

@@ -10,12 +10,13 @@
     "build": "vinext build",
     "start": "vinext start",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --experimental-strip-types --test tests/commission.test.ts tests/business-day.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/commission.test.ts tests/business-day.test.ts tests/business-day-workflow.test.ts",
     "test": "npm run test:unit && npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@radix-ui/react-alert-dialog": "^1.1.15",
     "clsx": "^2.1.1",
     "drizzle-orm": "0.45.2",
     "lucide-react": "^1.28.0",

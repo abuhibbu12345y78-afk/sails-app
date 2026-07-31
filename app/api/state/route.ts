@@ -1,7 +1,7 @@
-import type { AppSettings, DaySession, SaleRecord } from "../../../src/application/contracts";
+import type { AppSettings, DayCloseSnapshot, DaySession, DaySessionStatus, SaleRecord } from "../../../src/application/contracts";
+import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase } from "../../../src/application/business-day-use-cases";
 import { summarizeSales } from "../../../src/application/summary";
 import { DEFAULT_BUSINESS_TIMEZONE } from "../../../src/domain/business-time";
-import { deriveDaySessionStatus } from "../../../src/domain/day-session";
 import { ensureDatabase, friendlyDatabaseError, getDatabaseTime, parseDatabaseTimestamp } from "../../../src/infrastructure/d1/database";
 
 type Row = Record<string, string | number | null>;
@@ -40,7 +40,7 @@ export async function GET() {
     const settingsRow = await db.prepare("SELECT * FROM settings WHERE id = 'default'").first<Row>();
     const settings: AppSettings = {
       salesmanName: String(settingsRow?.salesman_name ?? "Salesman"),
-      businessName: String(settingsRow?.business_name ?? "Sales Commission"),
+      businessName: String(settingsRow?.business_name ?? "AL QUWWA"),
       whatsappNumber: String(settingsRow?.whatsapp_number ?? ""),
       currency: String(settingsRow?.currency ?? "INR"),
       locale: String(settingsRow?.locale ?? "en-IN"),
@@ -48,18 +48,27 @@ export async function GET() {
       realtimeEnabled: Number(settingsRow?.realtime_enabled ?? 1) === 1,
     };
     const time = await getDatabaseTime(settings.timezone);
-    const openSession = await db.prepare("SELECT * FROM day_sessions WHERE status = 'OPEN' ORDER BY started_at DESC LIMIT 1").first<Row>();
-    const datedSession = openSession ?? await db.prepare(
-      "SELECT * FROM day_sessions WHERE business_date = ? ORDER BY started_at DESC LIMIT 1"
-    ).bind(time.businessDate).first<Row>();
+    const sessionsResult = await db.prepare(
+      "SELECT id, business_date, status FROM day_sessions ORDER BY business_date DESC"
+    ).all<Row>();
+    const sessions = sessionsResult.results.map((row) => ({
+      id: String(row.id),
+      businessDate: String(row.business_date),
+      status: String(row.status) as "OPEN" | "CLOSED",
+    }));
+    const decision = getCurrentBusinessDayStateUseCase(time.businessDate, sessions);
+    const datedSession = decision.sessionId
+      ? await db.prepare("SELECT * FROM day_sessions WHERE id = ?").bind(decision.sessionId).first<Row>()
+      : null;
 
     let daySession: DaySession | null = null;
     let sales: SaleRecord[] = [];
     let rewards: Array<{ id: string; saleId: string; productName: string; cycleNumber: number; amountPaise: number; createdAt: string }> = [];
+    let dayCloseSnapshot: DayCloseSnapshot | null = null;
 
     if (datedSession) {
       const sessionId = String(datedSession.id);
-      const [stockResult, salesResult, rewardsResult] = await Promise.all([
+      const [stockResult, salesResult, rewardsResult, reopenCountRow, snapshotRow] = await Promise.all([
         db.prepare("SELECT * FROM day_stock_items WHERE day_session_id = ? ORDER BY product_name_snapshot")
           .bind(sessionId).all<Row>(),
         db.prepare(`SELECT s.* FROM sales s JOIN day_session_sales dss ON dss.sale_id = s.id
@@ -67,6 +76,9 @@ export async function GET() {
         db.prepare(`SELECT r.* FROM full_commission_rewards r
           JOIN day_session_sales dss ON dss.sale_id = r.sale_id
           WHERE dss.day_session_id = ? ORDER BY r.created_at DESC LIMIT 100`).bind(sessionId).all<Row>(),
+        db.prepare("SELECT COUNT(*) AS reopen_count FROM day_reopens WHERE day_session_id = ?").bind(sessionId).first<Row>(),
+        db.prepare(`SELECT * FROM day_close_snapshots
+          WHERE day_session_id = ? ORDER BY closure_version DESC LIMIT 1`).bind(sessionId).first<Row>(),
       ]);
       sales = salesResult.results.map(saleFromRow);
       rewards = rewardsResult.results.map((row: Row) => ({
@@ -83,6 +95,7 @@ export async function GET() {
         status: String(datedSession.status) as "OPEN" | "CLOSED",
         startedAt: isoTimestamp(datedSession.started_at),
         closedAt: datedSession.closed_at ? isoTimestamp(datedSession.closed_at) : null,
+        reopenCount: Number(reopenCountRow?.reopen_count ?? 0),
         stockItems: stockResult.results.map((row: Row) => ({
           id: String(row.id),
           productId: String(row.product_id),
@@ -93,12 +106,48 @@ export async function GET() {
           remainingQuantity: Number(row.remaining_quantity),
         })),
       };
+      if (snapshotRow) {
+        dayCloseSnapshot = {
+          id: String(snapshotRow.id),
+          businessDate: String(snapshotRow.business_date),
+          closureVersion: Number(snapshotRow.closure_version),
+          status: String(snapshotRow.status) as "ACTIVE" | "SUPERSEDED",
+          reportText: String(snapshotRow.report_text),
+          whatsappReportStatus: String(snapshotRow.whatsapp_report_status) as "CURRENT" | "OUTDATED",
+          createdAt: isoTimestamp(snapshotRow.created_at),
+        };
+      }
     }
 
-    const productsResult = await db.prepare(`SELECT p.*, cp.normal_sales_completed, cp.cycle_number
-      FROM products p JOIN commission_progress cp ON cp.product_id = p.id
-      WHERE p.active = 1 ORDER BY p.sort_order`).all<Row>();
-    const status = deriveDaySessionStatus(time.businessDate, daySession);
+    const [productsResult, historyResult] = await Promise.all([
+      db.prepare(`SELECT p.*, cp.normal_sales_completed, cp.cycle_number
+        FROM products p JOIN commission_progress cp ON cp.product_id = p.id
+        WHERE p.active = 1 ORDER BY p.sort_order`).all<Row>(),
+      db.prepare(`SELECT s.*, dss.business_date FROM sales s
+        JOIN day_session_sales dss ON dss.sale_id = s.id
+        ORDER BY s.created_at DESC LIMIT 250`).all<Row>(),
+    ]);
+    const historySales = historyResult.results.map((row) => ({
+      ...saleFromRow(row),
+      businessDate: String(row.business_date),
+    }));
+    const status = ({
+      NEW_DAY: "NOT_STARTED",
+      CURRENT_OPEN: "OPEN",
+      CURRENT_CLOSED: "CLOSED",
+      PREVIOUS_OPEN: "PREVIOUS_DAY_STILL_OPEN",
+    } satisfies Record<typeof decision.openingState, DaySessionStatus>)[decision.openingState];
+    const laterSessionExists = daySession
+      ? sessions.some((session) => session.businessDate > daySession.businessDate)
+      : false;
+    const reopenEligibility = daySession
+      ? reopenBusinessDayUseCase({
+        trustedBusinessDate: time.businessDate,
+        target: daySession,
+        laterSessionExists,
+        hasPermission: true,
+      })
+      : { allowed: false, reason: "No closed Business Day is available." };
 
     return Response.json({
       products: productsResult.results.map((row: Row) => ({
@@ -123,6 +172,10 @@ export async function GET() {
       },
       daySession,
       daySessionStatus: status,
+      openingState: decision.openingState,
+      dayCloseSnapshot,
+      reopenEligibility,
+      historySales,
       lastUpdatedAt: time.serverTimeIso,
     });
   } catch (error) {
