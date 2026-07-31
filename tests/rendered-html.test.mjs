@@ -20,6 +20,7 @@ test("replaces the starter with the Commission Compass product", async () => {
   assert.match(app, /Start New Day/);
   assert.match(app, /Previous Day Is Still Open/);
   assert.match(app, /Server time synchronized/);
+  assert.match(app, /home-summary-card/);
   assert.match(app, /Persistent Commission Progress/);
   assert.match(app, /Save Sale/);
   assert.match(css, /--primary:/);

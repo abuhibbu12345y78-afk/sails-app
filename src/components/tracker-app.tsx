@@ -225,6 +225,30 @@ function TimeCard({ state, clock, trustedTime, compact = false }: TimeProps & { 
   </section>;
 }
 
+function HomeSummaryCard({ state, clock, trustedTime, money }: TimeProps & { money: (value: number) => string }) {
+  return <section className="home-summary-card">
+    <div className="home-summary-time">
+      <div>
+        <p className="business-date">{clock.formatDate(trustedTime)}</p>
+        <p className="live-time">{clock.formatTime(trustedTime)} <span>IST</span></p>
+      </div>
+      <div className="home-summary-meta">
+        <div className="time-meta">
+          <span className={`sync-dot${clock.synchronized ? " online" : ""}`} />
+          {clock.synchronized ? "Server time synchronized" : <><CloudOff size={14} /> Time not synchronized</>}
+        </div>
+        <span className={`session-badge status-${state.daySessionStatus.toLowerCase()}`}>Business Day: {sessionLabel(state.daySessionStatus)}</span>
+      </div>
+    </div>
+    <div className="home-summary-divider" />
+    <div className="home-summary-earnings">
+      <p className="hero-label">Session earnings</p>
+      <h2 className="hero-value">{money(state.dashboard.totalEarningsPaise)}</h2>
+      <p className="hero-foot"><Sparkles size={17} /> From {state.dashboard.totalUnits} unit{state.dashboard.totalUnits === 1 ? "" : "s"} in this business day</p>
+    </div>
+  </section>;
+}
+
 function PreviousDayWarning({ state, navigate, money, formatTime }: { state: TrackerState; navigate: (screen: Screen) => void; money: (value: number) => string; formatTime: (date: Date) => string }) {
   if (!state.daySession || state.daySessionStatus !== "PREVIOUS_DAY_STILL_OPEN") return null;
   return <section className="warning-card">
@@ -244,27 +268,20 @@ function HomeScreen({ state, clock, trustedTime, money, navigate, dateChanged }:
   ];
   return <>
     <Header state={state} />
-    <TimeCard state={state} clock={clock} trustedTime={trustedTime} />
+    <HomeSummaryCard state={state} clock={clock} trustedTime={trustedTime} money={money} />
     {dateChanged && state.daySessionStatus === "OPEN" && <section className="warning-card"><div className="warning-title"><AlertTriangle size={22} /><div><h2>The calendar date has changed</h2><p>The previous business day remains open and unchanged. Close {state.daySession?.businessDate} before starting the new day.</p></div></div><div className="warning-actions"><button className="secondary-button" onClick={() => navigate("dashboard")}>View Previous Day</button><button className="danger-button" onClick={() => navigate("day-close")}>Close Previous Day</button></div></section>}
     <PreviousDayWarning state={state} navigate={navigate} money={money} formatTime={(date) => clock.formatTime(date, false)} />
     {state.daySessionStatus === "NOT_STARTED" && <button className="start-day-callout" onClick={() => navigate("start-day")}><span className="icon-tile"><Play size={22} /></span><span><strong>Start New Day</strong><small>Enter today’s picked quantities</small></span><ChevronRight /></button>}
     {state.daySessionStatus === "CLOSED" && <section className="info-card"><CalendarCheck size={22} /><div><strong>Business day closed</strong><p>A new day will not start automatically. Start it manually after the calendar date changes.</p></div></section>}
-    <div className="home-layout">
-      <section className="hero">
-        <p className="hero-label">Session earnings</p>
-        <h2 className="hero-value">{money(state.dashboard.totalEarningsPaise)}</h2>
-        <p className="hero-foot"><Sparkles size={17} /> From {state.dashboard.totalUnits} unit{state.dashboard.totalUnits === 1 ? "" : "s"} in this business day</p>
-      </section>
-      <section>
-        <div className="section-head"><div><h2>What would you like to do?</h2><p>Choose an action to get started.</p></div></div>
-        <div className="action-grid">{actions.map(({ screen, icon: Icon, title, text }) =>
-          <button className="action-card" key={screen} onClick={() => navigate(screen)}>
-            <span className="icon-tile"><Icon size={22} /></span><h3>{title}</h3><p>{text}</p>
-          </button>)}</div>
-        <div className="section-head"><div><h2>End of day</h2><p>Review totals before closing.</p></div></div>
-        <button className="secondary-button full-width" onClick={() => navigate("day-close")}><CalendarCheck size={20} /> Day Close <ChevronRight size={18} /></button>
-      </section>
-    </div>
+    <section className="home-actions">
+      <div className="section-head"><div><h2>What would you like to do?</h2><p>Choose an action to get started.</p></div></div>
+      <div className="action-grid">{actions.map(({ screen, icon: Icon, title, text }) =>
+        <button className="action-card" key={screen} onClick={() => navigate(screen)}>
+          <span className="icon-tile"><Icon size={22} /></span><h3>{title}</h3><p>{text}</p>
+        </button>)}</div>
+      <div className="section-head"><div><h2>End of day</h2><p>Review totals before closing.</p></div></div>
+      <button className="secondary-button full-width" onClick={() => navigate("day-close")}><CalendarCheck size={20} /> Day Close <ChevronRight size={18} /></button>
+    </section>
   </>;
 }
 
