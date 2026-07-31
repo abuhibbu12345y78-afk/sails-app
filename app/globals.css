@@ -85,7 +85,7 @@ button:focus-visible, input:focus-visible {
 .action-card:nth-child(3) .icon-tile { background: color-mix(in srgb, var(--accent) 38%, var(--card)); color: var(--accent-foreground); }
 .action-card h3 { margin: 1.05rem 0 .25rem; font-size: 1.05rem; }
 .action-card p { margin: 0; color: var(--muted-foreground); font-size: .84rem; line-height: 1.35; }
-.bottom-nav { position: fixed; z-index: 40; bottom: max(.65rem, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(calc(100% - 1rem), 36rem); padding: .5rem; display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid color-mix(in srgb, var(--border) 80%, transparent); border-radius: 1.35rem; background: color-mix(in srgb, var(--card) 94%, transparent); box-shadow: 0 16px 48px rgba(20,36,28,.18); backdrop-filter: blur(16px); }
+.bottom-nav { position: fixed; z-index: 40; bottom: 0; left: 0; width: 100%; padding: .45rem .5rem max(.45rem, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(5, 1fr); border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--card); box-shadow: none; }
 .nav-button { min-height: 3.65rem; border: 0; border-radius: .95rem; background: transparent; color: var(--muted-foreground); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .22rem; font-size: .68rem; font-weight: 700; cursor: pointer; }
 .nav-button.active { background: var(--primary); color: var(--primary-foreground); }
 .page-title { display: flex; align-items: center; gap: .7rem; margin: .25rem 0 1rem; }
