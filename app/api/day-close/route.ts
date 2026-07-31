@@ -17,7 +17,7 @@ export async function POST() {
       db.prepare(`SELECT COALESCE(SUM(s.quantity),0) total_units,
         COALESCE(SUM(s.gross_sales_paise),0) gross,
         COALESCE(SUM(s.total_normal_commission_paise),0) normal,
-        COALESCE(SUM(s.total_full_commission_paise),0) full,
+        COALESCE(SUM(s.total_full_commission_paise),0) full_commission,
         COALESCE(SUM(s.total_earnings_paise),0) earnings,
         COALESCE(SUM(s.net_collection_paise),0) net
         FROM sales s JOIN day_session_sales dss ON dss.sale_id = s.id
@@ -38,7 +38,7 @@ export async function POST() {
       "",
       `Gross Sales: ${formatCurrency(Number(totals?.gross ?? 0))}`,
       `Normal Commission: ${formatCurrency(Number(totals?.normal ?? 0))}`,
-      `Full Commission: ${formatCurrency(Number(totals?.full ?? 0))}`,
+      `Full Commission: ${formatCurrency(Number(totals?.full_commission ?? 0))}`,
       `Total Earnings: ${formatCurrency(Number(totals?.earnings ?? 0))}`,
       `Net Collection: ${formatCurrency(Number(totals?.net ?? 0))}`,
     ].join("\n");
@@ -53,7 +53,7 @@ export async function POST() {
         total_full_commission_paise, total_earnings_paise, net_collection_paise, report_text)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .bind(closureId, session.business_date, Number(totals?.total_units ?? 0), Number(totals?.gross ?? 0),
-          Number(totals?.normal ?? 0), Number(totals?.full ?? 0), Number(totals?.earnings ?? 0),
+          Number(totals?.normal ?? 0), Number(totals?.full_commission ?? 0), Number(totals?.earnings ?? 0),
           Number(totals?.net ?? 0), reportText),
       db.prepare(`INSERT INTO audit_logs (id, action, entity_type, entity_id, metadata_json)
         VALUES (?, 'day.closed', 'day_session', ?, ?)`)
