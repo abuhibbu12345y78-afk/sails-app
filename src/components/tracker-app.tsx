@@ -4,8 +4,9 @@ import {
   AlertTriangle, ArrowLeft, BarChart3, Boxes, CalendarCheck, Check,
   ChevronRight, Clock3, CloudOff, Gift, History, Home, IndianRupee, Minus,
   MoreHorizontal, Package, Play, Plus, ReceiptIndianRupee, RefreshCw, Save,
-  ShoppingBag, Sparkles, Trophy, UserRound, WalletCards, Wifi, X,
+  ShoppingBag, Sparkles, Trophy, WalletCards, Wifi, X,
 } from "lucide-react";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AppSettings, SaleRecord, TrackerState } from "../application/contracts";
 import {
@@ -211,7 +212,7 @@ type Clock = ReturnType<typeof useTrustedClock>;
 type TimeProps = { state: TrackerState; clock: Clock; trustedTime: Date };
 
 function Header({ state }: { state: TrackerState }) {
-  return <header className="topbar"><div><p className="eyebrow">GOOD DAY, {state.settings.salesmanName.toUpperCase()}</p><h1>{state.settings.businessName}</h1></div><div className="avatar" aria-hidden="true"><UserRound size={22} /></div></header>;
+  return <header className="topbar"><div><p className="eyebrow">GOOD DAY, {state.settings.salesmanName.toUpperCase()}</p><h1>{state.settings.businessName}</h1></div><div className="avatar"><Image src="/profile.webp" width={48} height={48} alt={`${state.settings.salesmanName} profile`} unoptimized /></div></header>;
 }
 
 function TimeCard({ state, clock, trustedTime, compact = false }: TimeProps & { compact?: boolean }) {
