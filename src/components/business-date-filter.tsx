@@ -1,3 +1,4 @@
+import { ml } from "../lib/ui-text-ml";
 import React, { useState } from "react";
 import { Calendar as CalendarIcon, Filter, X, Check, ChevronDown } from "lucide-react";
 import { Calendar } from "./ui/calendar";
@@ -45,24 +46,24 @@ export function computeEffectiveDateRange(
   switch (filter.preset) {
     case "today": {
       const dateStr = today.toISOString().split("T")[0];
-      return { startDate: dateStr, endDate: dateStr, label: `Today (${dateStr})` };
+      return { startDate: dateStr, endDate: dateStr, label: `${ml.labels.today} (${dateStr})` };
     }
     case "yesterday": {
       const y = new Date(today);
       y.setDate(y.getDate() - 1);
       const yStr = y.toISOString().split("T")[0];
-      return { startDate: yStr, endDate: yStr, label: `Yesterday (${yStr})` };
+      return { startDate: yStr, endDate: yStr, label: `${ml.labels.yesterday} (${yStr})` };
     }
     case "last7": {
       const start = new Date(today);
       start.setDate(start.getDate() - 6);
       const startStr = start.toISOString().split("T")[0];
       const endStr = today.toISOString().split("T")[0];
-      return { startDate: startStr, endDate: endStr, label: `Last 7 Days (${startStr} - ${endStr})` };
+      return { startDate: startStr, endDate: endStr, label: `${ml.labels.last7} (${startStr} - ${endStr})` };
     }
     case "specificDate": {
       const dateStr = filter.singleDate || today.toISOString().split("T")[0];
-      return { startDate: dateStr, endDate: dateStr, label: `Date: ${dateStr}` };
+      return { startDate: dateStr, endDate: dateStr, label: `${ml.labels.specificDate}: ${dateStr}` };
     }
     case "specificMonth": {
       const mStr = filter.month || today.toISOString().slice(0, 7);
@@ -72,7 +73,7 @@ export function computeEffectiveDateRange(
       return {
         startDate: `${mStr}-01`,
         endDate: `${mStr}-${pad(lastDay)}`,
-        label: `Month: ${mStr}`,
+        label: `${ml.labels.specificMonth}: ${mStr}`,
       };
     }
     case "previousMonth": {
@@ -86,17 +87,17 @@ export function computeEffectiveDateRange(
       return {
         startDate: `${prevMStr}-01`,
         endDate: `${prevMStr}-${pad(lastDay)}`,
-        label: `Previous Month (${prevMStr})`,
+        label: `${ml.labels.previousMonth} (${prevMStr})`,
       };
     }
     case "customRange": {
       const from = filter.fromDate || today.toISOString().split("T")[0];
       const to = filter.toDate || today.toISOString().split("T")[0];
-      return { startDate: from, endDate: to, label: `Range: ${from} to ${to}` };
+      return { startDate: from, endDate: to, label: `${ml.labels.customRange}: ${from} to ${to}` };
     }
     case "all":
     default:
-      return { label: "All Time" };
+      return { label: ml.labels.allTime };
   }
 }
 
@@ -162,14 +163,14 @@ export function BusinessDateFilter({
   };
 
   const presets: { id: DateFilterPreset; label: string }[] = [
-    { id: "today", label: "Today" },
-    { id: "yesterday", label: "Yesterday" },
-    { id: "last7", label: "Last 7 Days" },
-    { id: "specificDate", label: "Specific Date" },
-    { id: "specificMonth", label: "Specific Month" },
-    { id: "previousMonth", label: "Previous Month" },
-    { id: "customRange", label: "Custom Range" },
-    { id: "all", label: "All Time" },
+    { id: "today", label: ml.labels.today },
+    { id: "yesterday", label: ml.labels.yesterday },
+    { id: "last7", label: ml.labels.last7 },
+    { id: "specificDate", label: ml.labels.specificDate },
+    { id: "specificMonth", label: ml.labels.specificMonth },
+    { id: "previousMonth", label: ml.labels.previousMonth },
+    { id: "customRange", label: ml.labels.customRange },
+    { id: "all", label: ml.labels.allTime },
   ];
 
   return (

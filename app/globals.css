@@ -124,6 +124,18 @@ button:focus-visible, input:focus-visible {
 .progress-row strong { color: var(--foreground); }
 .progress-track { height: .5rem; border-radius: 99px; background: var(--muted); overflow: hidden; }
 .progress-fill { height: 100%; background: var(--primary); border-radius: inherit; transition: width .25s; }
+
+/* Accessibility Highlights */
+.highlight-red { color: var(--destructive); font-weight: 650; }
+.highlight-red-bg { background: color-mix(in srgb, var(--destructive) 10%, var(--card)); color: var(--destructive); font-weight: 650; padding: .15rem .35rem; border-radius: .3rem; border: 1px solid color-mix(in srgb, var(--destructive) 20%, transparent); }
+
+.highlight-amber { color: #d97706; font-weight: 650; }
+.highlight-amber-bg { background: rgba(245, 158, 11, 0.12); color: #b45309; font-weight: 650; padding: .15rem .35rem; border-radius: .3rem; border: 1px solid rgba(245, 158, 11, 0.2); }
+
+.highlight-blue { color: #0284c7; font-weight: 650; }
+.highlight-blue-bg { background: rgba(14, 165, 233, 0.1); color: #0369a1; font-weight: 650; padding: .15rem .35rem; border-radius: .3rem; border: 1px solid rgba(14, 165, 233, 0.2); }
+
+.highlight-green-bg { background: rgba(16, 185, 129, 0.1); color: #047857; font-weight: 650; padding: .15rem .35rem; border-radius: .3rem; border: 1px solid rgba(16, 185, 129, 0.2); }
 .metrics { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .75rem; }
 .metric { padding: 1rem; }
 .metric-icon { color: var(--primary); }

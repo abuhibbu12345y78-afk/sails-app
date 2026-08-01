@@ -2,6 +2,7 @@
 
 import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ml } from "../../lib/ui-text-ml";
 
 export interface PaginationProps {
   currentPage: number;
@@ -46,14 +47,14 @@ export function Pagination({
     >
       {/* Item Range & Total */}
       <div style={{ color: "var(--muted, #6b7280)", fontWeight: 500 }}>
-        Showing <strong>{startItem}</strong> - <strong>{endItem}</strong> of <strong>{totalItems}</strong> records
+        {ml.pagination.showing} <strong>{startItem}</strong> - <strong>{endItem}</strong> {ml.pagination.of} <strong>{totalItems}</strong> {ml.pagination.records}
       </div>
 
       {/* Controls & Page Size Selector */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
         {onPageSizeChange && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-            <span style={{ color: "var(--muted, #6b7280)" }}>Rows:</span>
+            <span style={{ color: "var(--muted, #6b7280)" }}>{ml.pagination.rows}:</span>
             <select
               value={pageSize}
               onChange={(e) => {
@@ -100,7 +101,7 @@ export function Pagination({
           </button>
 
           <span style={{ fontWeight: 600, padding: "0 0.35rem" }}>
-            Page {currentPage} of {totalPages}
+            {ml.pagination.page} {currentPage} {ml.pagination.of} {totalPages}
           </span>
 
           <button
