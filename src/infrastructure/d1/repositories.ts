@@ -445,8 +445,12 @@ export class D1SaleRepository implements SaleRepository {
 
   async markOfferReceived(rewardId: string): Promise<void> {
     const db = await ensureDatabase();
-    // Simple stub for D1 for now, as Supabase is the focus.
     await db.prepare("UPDATE full_commission_rewards SET status = 'received' WHERE id = ?").bind(rewardId);
+  }
+
+  async undoOfferReceived(rewardId: string): Promise<void> {
+    const db = await ensureDatabase();
+    await db.prepare("UPDATE full_commission_rewards SET status = 'earned' WHERE id = ?").bind(rewardId);
   }
 }
 

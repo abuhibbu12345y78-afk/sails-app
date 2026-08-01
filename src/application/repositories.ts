@@ -99,6 +99,7 @@ export interface CreateSaleResult {
 export interface SaleRepository {
   createSale(input: CreateSaleInput): Promise<CreateSaleResult>;
   markOfferReceived(rewardId: string): Promise<void>;
+  undoOfferReceived(rewardId: string): Promise<void>;
 }
 
 export interface SettingsRepository {

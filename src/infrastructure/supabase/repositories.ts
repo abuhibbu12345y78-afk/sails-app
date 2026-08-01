@@ -379,6 +379,21 @@ export class SupabaseSaleRepository implements SaleRepository {
       throw new Error(`mark_offer_received_atomic failed: ${error.message}`);
     }
   }
+
+  async undoOfferReceived(rewardId: string): Promise<void> {
+    const supabase = createAdminClient();
+    const context = await getActiveContext(supabase);
+    const { error } = await supabase.rpc("undo_offer_received_atomic", {
+      p_salesman_id: context.salesmanId,
+      p_reward_id: rewardId,
+    });
+
+    if (error) {
+      if (error.message.includes('reward_not_found')) throw new DomainError("Reward not found.", 404);
+      if (error.message.includes('reward_void')) throw new DomainError("Reward is voided.", 400);
+      throw new Error(`undo_offer_received_atomic failed: ${error.message}`);
+    }
+  }
 }
 
 function saleFromSupabaseRow(row: DbRow): SaleRecord {
@@ -476,10 +491,12 @@ export class SupabaseStateRepository implements StateRepository {
       rewards = (rewardsRes.data || []).map((row: DbRow) => ({
         id: String(row.id),
         saleId: String(row.sale_id),
-        productName: String(row.product_name),
+        productId: String(row.product_id),
+        productName: String(row.product_name_snapshot || "Offer Reward"),
         cycleNumber: Number(row.cycle_number),
         amountPaise: Number(row.amount_paise),
         createdAt: isoTimestamp(row.created_at),
+        receivedAt: row.received_at ? isoTimestamp(row.received_at) : null,
         status: String(row.status || 'EARNED').toUpperCase() as "EARNED" | "RECEIVED",
       })) as FullCommissionReward[];
       

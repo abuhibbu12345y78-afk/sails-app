@@ -26,11 +26,13 @@ export interface DashboardSummary {
 export interface FullCommissionReward {
   id: string;
   saleId: string;
+  productId?: string;
   productName: string;
   cycleNumber: number;
   amountPaise: number;
   status: 'EARNED' | 'RECEIVED';
   createdAt: string;
+  receivedAt?: string | null;
 }
 
 export interface AppSettings {

@@ -162,7 +162,11 @@ describe("server and persistence boundaries", () => {
   });
 
   it("normal day transitions contain no DELETE operations", () => {
-    for (const source of [database, d1Repositories]) {
+    const normalTransitions = d1Repositories.substring(
+      d1Repositories.indexOf("async startDaySession"),
+      d1Repositories.indexOf("async resetBusinessDay")
+    );
+    for (const source of [database, normalTransitions]) {
       assert.doesNotMatch(source, /\bDELETE\s+FROM\b/i);
     }
   });

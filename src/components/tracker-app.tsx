@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AppSettings, SaleRecord, TrackerState } from "../application/contracts";
+import type { AppSettings, FullCommissionReward, SaleRecord, TrackerState } from "../application/contracts";
 import {
   DEFAULT_BUSINESS_TIMEZONE,
   formatWorkingDuration,
@@ -172,7 +172,7 @@ export function TrackerApp() {
         {screen === "additional-pickup" && <AdditionalPickupScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "sale" && <SaleScreen state={state} money={money} navigate={navigate} openSale={openSale} dateChanged={dateChanged} />}
         {screen === "dashboard" && <DashboardScreen {...timeProps} state={state} money={money} navigate={navigate} />}
-        {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
+        {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} reload={load} showToast={setToast} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
         {screen === "history" && <HistoryScreen sales={state.historySales} money={money} navigate={navigate} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
         {screen === "day-close" && <DayCloseScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "settings" && <SettingsScreen settings={state.settings} navigate={navigate} reload={load} showToast={setToast} />}
@@ -692,11 +692,235 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate }: TimePro
   </>;
 }
 
-function RewardsScreen({ state, money, navigate, formatTimestamp }: { state: TrackerState; money: (value: number) => string; navigate: (screen: Screen) => void; formatTimestamp: (value: string) => string }) {
+function RewardsScreen({ state, money, navigate, reload, showToast, formatTimestamp }: {
+  state: TrackerState;
+  money: (value: number) => string;
+  navigate: (screen: Screen) => void;
+  reload: (silent?: boolean) => Promise<void>;
+  showToast: (toast: ToastState) => void;
+  formatTimestamp: (value: string) => string;
+}) {
+  const [selectedReward, setSelectedReward] = useState<FullCommissionReward | null>(null);
+  const [confirmMode, setConfirmMode] = useState<"receive" | "undo" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const total = state.rewards.reduce((sum, reward) => sum + reward.amountPaise, 0);
-  return <><PageTitle title="Offers" navigate={navigate} /><section className="hero"><p className="hero-label">Session Offers Earned</p><h2 className="hero-value">{money(total)}</h2><p className="hero-foot"><Trophy size={17} /> {state.rewards.length} earned Offer record{state.rewards.length === 1 ? "" : "s"}</p></section>
-    <div className="section-head"><div><h2>Offer Records</h2><p>Persistent history remains in the database.</p></div></div>
-    {state.rewards.length ? <div className="list">{state.rewards.map((reward) => <article className="list-card" key={reward.id}><div className="list-row"><div><h3>{reward.productName}</h3><p>{formatTimestamp(reward.createdAt)} · Cycle {reward.cycleNumber}</p></div><div className="list-amount">{money(reward.amountPaise)}</div></div></article>)}</div> : <Empty icon={Trophy} text="No Offers earned in this session." />}</>;
+
+  async function handleMarkReceived() {
+    if (!selectedReward || submitting) return;
+    setSubmitting(true);
+    try {
+      await api("/api/offers/receive", {
+        method: "POST",
+        body: JSON.stringify({ rewardId: selectedReward.id }),
+      });
+      await reload(true);
+      showToast({ message: "Offer marked as RECEIVED." });
+      setConfirmMode(null);
+      setSelectedReward(null);
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to update offer status.", error: true });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleUndoReceived() {
+    if (!selectedReward || submitting) return;
+    setSubmitting(true);
+    try {
+      await api("/api/offers/undo", {
+        method: "POST",
+        body: JSON.stringify({ rewardId: selectedReward.id }),
+      });
+      await reload(true);
+      showToast({ message: "Offer status reset back to EARNED." });
+      setConfirmMode(null);
+      setSelectedReward(null);
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to undo offer status.", error: true });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <PageTitle title="Offers" navigate={navigate} />
+      <section className="hero">
+        <p className="hero-label">Session Offers Earned</p>
+        <h2 className="hero-value">{money(total)}</h2>
+        <p className="hero-foot">
+          <Trophy size={17} /> {state.rewards.length} earned Offer record{state.rewards.length === 1 ? "" : "s"}
+        </p>
+      </section>
+
+      <div className="section-head">
+        <div>
+          <h2>Offer Records</h2>
+          <p>Tap an EARNED offer to mark as received.</p>
+        </div>
+      </div>
+
+      {state.rewards.length ? (
+        <div className="list">
+          {state.rewards.map((reward) => {
+            const isEarned = reward.status === "EARNED";
+            const isReceived = reward.status === "RECEIVED";
+
+            return (
+              <article
+                className={`list-card offer-card ${isReceived ? "received-card" : "earned-card"}`}
+                key={reward.id}
+                style={{
+                  cursor: isEarned ? "pointer" : "default",
+                  borderLeft: isReceived ? "4px solid #f59e0b" : "4px solid #10b981",
+                  padding: "1rem",
+                  marginBottom: "0.75rem",
+                  borderRadius: "8px",
+                  background: isReceived ? "rgba(245, 158, 11, 0.08)" : undefined,
+                }}
+                onClick={() => {
+                  if (isEarned) {
+                    setSelectedReward(reward);
+                    setConfirmMode("receive");
+                  }
+                }}
+              >
+                <div className="list-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{reward.productName}</h3>
+                    <p style={{ margin: "0.25rem 0", color: "var(--muted)", fontSize: "0.85rem" }}>
+                      Cycle {reward.cycleNumber} · Earned {formatTimestamp(reward.createdAt)}
+                    </p>
+                    {isReceived && reward.receivedAt && (
+                      <p style={{ margin: 0, color: "#d97706", fontSize: "0.8rem", fontWeight: 600 }}>
+                        Received at {formatTimestamp(reward.receivedAt)}
+                      </p>
+                    )}
+                    {isEarned && (
+                      <span style={{ fontSize: "0.75rem", color: "var(--primary-color)", fontWeight: 500 }}>
+                        Tap to mark as received
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ textAlign: "right" }}>
+                    <div className="list-amount" style={{ fontSize: "1.1rem", fontWeight: "bold" }}>
+                      {money(reward.amountPaise)}
+                    </div>
+                    <span
+                      className={`badge ${isReceived ? "amber-badge" : "ready"}`}
+                      style={{
+                        display: "inline-block",
+                        marginTop: "0.25rem",
+                        padding: "0.2rem 0.5rem",
+                        borderRadius: "4px",
+                        fontSize: "0.75rem",
+                        fontWeight: "bold",
+                        backgroundColor: isReceived ? "#fef3c7" : "#d1fae5",
+                        color: isReceived ? "#b45309" : "#047857",
+                      }}
+                    >
+                      {reward.status}
+                    </span>
+
+                    {isReceived && (
+                      <div style={{ marginTop: "0.5rem" }}>
+                        <button
+                          className="secondary-button"
+                          style={{
+                            padding: "0.25rem 0.6rem",
+                            fontSize: "0.75rem",
+                            lineHeight: 1,
+                            minHeight: "auto",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedReward(reward);
+                            setConfirmMode("undo");
+                          }}
+                        >
+                          UNDO
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <Empty icon={Trophy} text="No Offers earned in this session." />
+      )}
+
+      {/* Confirmation Dialog for Receive */}
+      <AlertDialog open={confirmMode === "receive"} onOpenChange={(open) => !open && setConfirmMode(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark this Offer as Received?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirm that you have actually received this Offer. This will change the Offer status from EARNED to RECEIVED.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {selectedReward && (
+            <div className="dialog-summary">
+              <span>Product <strong>{selectedReward.productName}</strong></span>
+              <span>Offer Value <strong>{money(selectedReward.amountPaise)}</strong></span>
+              <span>Cycle Number <strong>Cycle {selectedReward.cycleNumber}</strong></span>
+              <span>Earned Date/Time <strong>{formatTimestamp(selectedReward.createdAt)}</strong></span>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={submitting}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleMarkReceived();
+              }}
+            >
+              {submitting ? "Updating…" : "Yes, Mark as Received"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmation Dialog for Undo */}
+      <AlertDialog open={confirmMode === "undo"} onOpenChange={(open) => !open && setConfirmMode(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Undo Received Status?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will change the Offer back from RECEIVED to EARNED.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {selectedReward && (
+            <div className="dialog-summary">
+              <span>Product <strong>{selectedReward.productName}</strong></span>
+              <span>Offer Value <strong>{money(selectedReward.amountPaise)}</strong></span>
+              <span>Cycle Number <strong>Cycle {selectedReward.cycleNumber}</strong></span>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <button
+              className="danger-button"
+              disabled={submitting}
+              style={{ width: "auto" }}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleUndoReceived();
+              }}
+            >
+              {submitting ? "Undoing…" : "Undo"}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }
 
 function HistoryScreen({ sales, money, navigate, formatTimestamp }: { sales: SaleRecord[]; money: (value: number) => string; navigate: (screen: Screen) => void; formatTimestamp: (value: string) => string }) {
