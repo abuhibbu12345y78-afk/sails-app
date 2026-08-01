@@ -10,6 +10,16 @@ const settingsSchema = z.object({
   realtimeEnabled: z.boolean(),
 });
 
+export async function GET() {
+  try {
+    const settings = await provider.settings.getSettings();
+    return Response.json(settings);
+  } catch (error) {
+    if (error instanceof DomainError) return Response.json({ error: error.message }, { status: error.status });
+    return Response.json({ error: friendlyDatabaseError(error) }, { status: 500 });
+  }
+}
+
 export async function PUT(request: Request) {
   try {
     const input = settingsSchema.parse(await request.json());
