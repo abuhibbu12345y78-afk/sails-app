@@ -23,7 +23,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "./ui/alert-dialog";
 
-type Screen = "home" | "start-day" | "additional-pickup" | "sale" | "dashboard" | "rewards" | "history" | "day-close" | "settings";
+type Screen = "home" | "start-day" | "additional-pickup" | "sale" | "dashboard" | "rewards" | "history" | "day-close" | "settings" | "historical-entry";
 type ToastState = { message: string; error?: boolean } | null;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -176,8 +176,9 @@ export function TrackerApp() {
         {screen === "history" && <HistoryScreen sales={state.historySales} money={money} navigate={navigate} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
         {screen === "day-close" && <DayCloseScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "settings" && <SettingsScreen settings={state.settings} navigate={navigate} reload={load} showToast={setToast} />}
+        {screen === "historical-entry" && <HistoricalEntryScreen state={state} navigate={navigate} reload={load} showToast={setToast} />}
       </main>
-      {state.daySessionStatus === "OPEN" && screen !== "additional-pickup" && <BottomNav screen={screen} navigate={navigate} />}
+      {screen !== "additional-pickup" && <BottomNav screen={screen} navigate={navigate} />}
       {selectedProduct && preview && selectedStock && (
         <div className="drawer-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !saving) setSelectedProduct(null);
@@ -729,7 +730,108 @@ function SettingsScreen({ settings, navigate, reload, showToast }: { settings: A
     <div className="field"><label>Business timezone</label><input value={form.timezone} disabled /></div>
     <div className="switch-row"><div><strong>Live refresh</strong><p className="eyebrow" style={{ marginTop: ".2rem" }}>Keep totals up to date</p></div><button className={`switch${form.realtimeEnabled ? " on" : ""}`} role="switch" aria-checked={form.realtimeEnabled} onClick={() => setForm({ ...form, realtimeEnabled: !form.realtimeEnabled })}><span /></button></div>
     <button className="primary-button full-width" disabled={saving} onClick={() => void save()}><Save size={19} />{saving ? "Saving…" : "Save Settings"}</button>
+    <div style={{ marginTop: "2rem" }}>
+      <button className="secondary-button full-width" onClick={() => navigate("historical-entry")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+        <CalendarCheck size={19} /> Previous Business Data
+      </button>
+    </div>
   </section></>;
+}
+
+function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: TrackerState; navigate: (screen: Screen) => void; reload: (silent?: boolean) => Promise<void>; showToast: (toast: ToastState) => void }) {
+  const [step, setStep] = useState<"date" | "pickup" | "sales" | "review">("date");
+  const [date, setDate] = useState("");
+  const [pickup, setPickup] = useState<Record<string, number>>({});
+  const [sales, setSales] = useState<Record<string, number>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit() {
+    setSubmitting(true);
+    try {
+      const pickupItems = Object.entries(pickup).filter(([_, q]) => q > 0).map(([id, q]) => ({ productId: id, pickedQuantity: q }));
+      const salesItems = Object.entries(sales).filter(([_, q]) => q > 0).map(([id, q]) => ({ productId: id, quantity: q }));
+      
+      await api("/api/historical-entry", {
+        method: "POST",
+        body: JSON.stringify({ businessDate: date, pickupItems, salesItems })
+      });
+      await reload(false);
+      showToast({ message: "Historical data saved successfully." });
+      navigate("history");
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to save historical data.", error: true });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const products = state.products;
+
+  if (step === "date") {
+    return <><PageTitle title="Previous Business Data" navigate={() => navigate("settings")} />
+      <section className="settings-card">
+        <p className="eyebrow" style={{ marginBottom: "1rem" }}>SELECT PAST DATE</p>
+        <div className="field">
+          <input type="date" max={new Date().toISOString().split("T")[0]} value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+        <button className="primary-button full-width" disabled={!date} onClick={() => setStep("pickup")}>Next: Stock Pickup</button>
+      </section>
+    </>;
+  }
+
+  if (step === "pickup") {
+    return <><PageTitle title="Stock Pickup" navigate={() => setStep("date")} />
+      <section className="settings-card">
+        <p className="eyebrow" style={{ marginBottom: "1rem" }}>ENTER STARTING STOCK FOR {date}</p>
+        {products.map(p => (
+          <div key={p.id} className="field">
+            <label>{p.name}</label>
+            <input type="number" min="0" value={pickup[p.id] || ""} onChange={e => setPickup({ ...pickup, [p.id]: parseInt(e.target.value) || 0 })} />
+          </div>
+        ))}
+        <button className="primary-button full-width" onClick={() => setStep("sales")}>Next: Sales</button>
+      </section>
+    </>;
+  }
+
+  if (step === "sales") {
+    return <><PageTitle title="Sales" navigate={() => setStep("pickup")} />
+      <section className="settings-card">
+        <p className="eyebrow" style={{ marginBottom: "1rem" }}>ENTER TOTAL SALES FOR {date}</p>
+        {products.map(p => {
+          const picked = pickup[p.id] || 0;
+          if (picked === 0) return null;
+          return <div key={p.id} className="field">
+            <label>{p.name} (Max: {picked})</label>
+            <input type="number" min="0" max={picked} value={sales[p.id] || ""} onChange={e => setSales({ ...sales, [p.id]: parseInt(e.target.value) || 0 })} />
+          </div>;
+        })}
+        <button className="primary-button full-width" onClick={() => setStep("review")}>Next: Review</button>
+      </section>
+    </>;
+  }
+
+  return <><PageTitle title="Review" navigate={() => setStep("sales")} />
+    <section className="settings-card">
+      <p className="eyebrow" style={{ marginBottom: "1rem" }}>CONFIRM HISTORICAL DATA FOR {date}</p>
+      <div className="summary-list">
+        {products.filter(p => (pickup[p.id] || 0) > 0).map(p => (
+          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: ".5rem", paddingBottom: ".5rem", borderBottom: "1px solid var(--border)" }}>
+            <span>{p.name}</span>
+            <div style={{ textAlign: "right" }}>
+              <div>Picked: {pickup[p.id] || 0}</div>
+              <div><strong>Sold: {sales[p.id] || 0}</strong></div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: "2rem" }}>
+        <button className="primary-button full-width" disabled={submitting} onClick={() => void submit()}>
+          {submitting ? "SAVING..." : "CONFIRM AND SAVE"}
+        </button>
+      </div>
+    </section>
+  </>;
 }
 
 function Empty({ icon: Icon, text }: { icon: typeof Gift; text: string }) {
@@ -741,6 +843,7 @@ function BottomNav({ screen, navigate }: { screen: Screen; navigate: (screen: Sc
     { screen: "home" as const, icon: Home, label: "Home" },
     { screen: "sale" as const, icon: ShoppingBag, label: "Sale" },
     { screen: "dashboard" as const, icon: BarChart3, label: "Dashboard" },
+    { screen: "rewards" as const, icon: Trophy, label: "Offers" },
     { screen: "history" as const, icon: Clock3, label: "History" },
     { screen: "settings" as const, icon: MoreHorizontal, label: "More" },
   ];

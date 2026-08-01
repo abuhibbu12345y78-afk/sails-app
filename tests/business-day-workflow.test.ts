@@ -136,45 +136,47 @@ describe("same-date reopen and additional pickup", () => {
 describe("server and persistence boundaries", () => {
   const schema = readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
   const database = readFileSync(new URL("../src/infrastructure/d1/database.ts", import.meta.url), "utf8");
-  const startRoute = readFileSync(new URL("../app/api/day-start/route.ts", import.meta.url), "utf8");
-  const closeRoute = readFileSync(new URL("../app/api/day-close/route.ts", import.meta.url), "utf8");
-  const reopenRoute = readFileSync(new URL("../app/api/day-reopen/route.ts", import.meta.url), "utf8");
-  const pickupRoute = readFileSync(new URL("../app/api/additional-pickup/route.ts", import.meta.url), "utf8");
+  const d1Repositories = readFileSync(new URL("../src/infrastructure/d1/repositories.ts", import.meta.url), "utf8");
   const realtime = readFileSync(new URL("../src/infrastructure/realtime/realtime-service.ts", import.meta.url), "utf8");
 
   it("blocks duplicate same-date sessions with scoped and base unique constraints", () => {
     assert.match(schema, /day_session_scope_business_date_idx/);
+
     assert.match(schema, /tenantId[\s\S]*companyId[\s\S]*salesmanId[\s\S]*businessDate/);
     assert.match(schema, /businessDate: text\("business_date"\)\.notNull\(\)\.unique\(\)/);
   });
 
   it("uses trusted database timestamps and rejects client timestamps", () => {
-    for (const route of [startRoute, closeRoute, reopenRoute, pickupRoute]) {
-      assert.match(route, /getDatabaseTime/);
-      assert.doesNotMatch(route, /input\.(startedAt|closedAt|reopenedAt|createdAt|timestamp)/);
-    }
+    assert.match(d1Repositories, /getDatabaseTime/);
+    assert.doesNotMatch(d1Repositories, /input\.(startedAt|closedAt|reopenedAt|createdAt|timestamp)/);
   });
 
   it("creates versioned snapshots, supersedes reports, and audits reopen and pickup", () => {
-    assert.match(closeRoute, /day_close_snapshots/);
-    assert.match(closeRoute, /closureVersion/);
-    assert.match(reopenRoute, /SUPERSEDED/);
-    assert.match(reopenRoute, /OUTDATED/);
-    assert.match(reopenRoute, /day\.reopened/);
-    assert.match(pickupRoute, /day_stock_adjustments/);
-    assert.match(pickupRoute, /stock\.additional_pickup/);
+    assert.match(d1Repositories, /day_close_snapshots/);
+    assert.match(d1Repositories, /closureVersion/);
+    assert.match(d1Repositories, /SUPERSEDED/);
+    assert.match(d1Repositories, /OUTDATED/);
+    assert.match(d1Repositories, /day\.reopened/);
+    assert.match(d1Repositories, /day_stock_adjustments/);
+    assert.match(d1Repositories, /stock\.additional_pickup/);
   });
 
   it("normal day transitions contain no DELETE operations", () => {
-    for (const source of [database, startRoute, closeRoute, reopenRoute, pickupRoute]) {
+    for (const source of [database, d1Repositories]) {
       assert.doesNotMatch(source, /\bDELETE\s+FROM\b/i);
     }
   });
 
   it("reopen updates the existing session instead of inserting another", () => {
-    assert.match(reopenRoute, /UPDATE day_sessions SET status = 'OPEN'/);
-    assert.doesNotMatch(reopenRoute, /INSERT INTO day_sessions/);
+    const reopenMethod = d1Repositories.substring(
+      d1Repositories.indexOf("async reopenDaySession"),
+      d1Repositories.indexOf("async additionalPickup")
+    );
+    assert.match(reopenMethod, /UPDATE day_sessions SET status = 'OPEN'/);
+    assert.doesNotMatch(reopenMethod, /INSERT INTO day_sessions/);
   });
+
+
 
   it("Realtime is synchronization-only and contains no transition mutation", () => {
     assert.doesNotMatch(realtime, /day-start|day-close|day-reopen|additional-pickup|INSERT|UPDATE|DELETE/i);

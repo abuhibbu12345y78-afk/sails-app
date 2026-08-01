@@ -15,6 +15,13 @@
       "when": 1785493026203,
       "tag": "0001_worthless_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785528993244,
+      "tag": "0002_military_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

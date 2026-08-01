@@ -103,7 +103,7 @@ button:focus-visible, input:focus-visible {
 .action-card:nth-child(3) .icon-tile { background: color-mix(in srgb, var(--accent) 38%, var(--card)); color: var(--accent-foreground); }
 .action-card h3 { margin: 1.05rem 0 .25rem; font-size: 1.05rem; }
 .action-card p { margin: 0; color: var(--muted-foreground); font-size: .84rem; line-height: 1.35; }
-.bottom-nav { position: fixed; z-index: 40; bottom: 0; left: 0; width: 100%; padding: .45rem .5rem max(.45rem, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(5, 1fr); border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--card); box-shadow: none; }
+.bottom-nav { position: fixed; z-index: 40; bottom: 0; left: 0; width: 100%; padding: .45rem .5rem max(.45rem, env(safe-area-inset-bottom)); display: grid; grid-template-columns: repeat(6, 1fr); border: 0; border-top: 1px solid var(--border); border-radius: 0; background: var(--card); box-shadow: none; }
 .nav-button { min-height: 3.65rem; border: 0; border-radius: .95rem; background: transparent; color: var(--muted-foreground); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .22rem; font-size: .68rem; font-weight: 700; cursor: pointer; }
 .nav-button.active { background: var(--primary); color: var(--primary-foreground); }
 .page-title { display: flex; align-items: center; gap: .7rem; margin: .25rem 0 1rem; }
@@ -233,7 +233,7 @@ button:focus-visible, input:focus-visible {
 .report-text { white-space: pre-wrap; font-family: inherit; line-height: 1.6; }
 .decision-screen { width: min(100%, 44rem); margin: 0 auto; }
 .landing-brand { margin: .25rem 0 .8rem; color: var(--primary); font-size: .82rem; font-weight: 850; letter-spacing: .14em; }
-.new-day-landing { width: min(100%, 35rem); min-height: calc(100dvh - 4rem); margin: 0 auto; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 1.5rem 1rem 4rem; text-align: center; }
+.new-day-landing { width: min(100%, 35rem); min-height: calc(100dvh - 4rem); margin: 0 auto; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 1.5rem 1rem calc(6.5rem + env(safe-area-inset-bottom)); text-align: center; }
 .landing-mark { width: 4rem; height: 4rem; display: grid; place-items: center; border-radius: 1.25rem; background: var(--primary); color: var(--primary-foreground); box-shadow: var(--shadow); }
 .new-day-landing .landing-brand { margin: 1.15rem 0 .75rem; }
 .new-day-landing h1 { margin: 0; max-width: 22rem; font-size: clamp(1.5rem, 7vw, 2.15rem); letter-spacing: -.04em; }

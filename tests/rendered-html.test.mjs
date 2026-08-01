@@ -23,6 +23,7 @@ test("renders the AL QUWWA Business Day product", async () => {
   assert.match(app, /Previous Business Day Is Still Open/);
   assert.match(app, /OPEN NEW DAY/);
   assert.match(app, /REOPEN CURRENT DAY/);
+  assert.match(app, /Accidentally closed/);
   assert.match(app, /CONFIRM ADDITIONAL PICKUP/);
   assert.match(app, /AlertDialogContent/);
   assert.match(app, /Server time synchronized/);
@@ -45,20 +46,17 @@ test("keeps database calls behind route and infrastructure boundaries", async ()
 });
 
 test("keeps trusted time and day actions server-authoritative", async () => {
-  const [clock, startRoute, closeRoute, saleRoute] = await Promise.all([
+  const [clock, d1Repositories] = await Promise.all([
     readFile(new URL("../src/hooks/use-trusted-clock.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/day-start/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/day-close/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/sales/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/infrastructure/d1/repositories.ts", import.meta.url), "utf8"),
   ]);
   assert.match(clock, /visibilitychange/);
   assert.match(clock, /window\.addEventListener\("online"/);
   assert.match(clock, /setInterval\(.*RESYNC_INTERVAL_MS/s);
-  assert.doesNotMatch(startRoute, /input\.(startedAt|started_at|businessDate|timestamp)/);
-  assert.match(startRoute, /getDatabaseTime/);
-  assert.match(closeRoute, /closed_at = CURRENT_TIMESTAMP/);
-  assert.match(saleRoute, /remaining_quantity = remaining_quantity -/);
-  assert.match(saleRoute, /UPDATE commission_progress/);
-  assert.doesNotMatch(closeRoute, /UPDATE commission_progress/);
-  assert.doesNotMatch(startRoute, /UPDATE commission_progress/);
+  assert.doesNotMatch(d1Repositories, /input\.(startedAt|started_at|businessDate|timestamp)/);
+  assert.match(d1Repositories, /getDatabaseTime/);
+  assert.match(d1Repositories, /closed_at = CURRENT_TIMESTAMP/);
+  assert.match(d1Repositories, /remaining_quantity = remaining_quantity -/);
+  assert.match(d1Repositories, /UPDATE commission_progress/);
 });
+

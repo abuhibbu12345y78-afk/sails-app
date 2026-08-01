@@ -19,6 +19,7 @@ export interface DashboardSummary {
   totalNormalCommissionPaise: number;
   totalFullCommissionPaise: number;
   totalEarningsPaise: number;
+  totalExpensesPaise: number;
   netCollectionPaise: number;
 }
 
@@ -28,6 +29,7 @@ export interface FullCommissionReward {
   productName: string;
   cycleNumber: number;
   amountPaise: number;
+  status: 'EARNED' | 'RECEIVED';
   createdAt: string;
 }
 
@@ -51,6 +53,14 @@ export interface DayStockItem {
   remainingQuantity: number;
 }
 
+export interface DayExpense {
+  id: string;
+  daySessionId: string;
+  category: "Petrol" | "Food" | "Other";
+  amountPaise: number;
+  createdAt: string;
+}
+
 export interface DaySession {
   id: string;
   businessDate: string;
@@ -59,6 +69,7 @@ export interface DaySession {
   closedAt: string | null;
   reopenCount: number;
   stockItems: DayStockItem[];
+  expenses: DayExpense[];
 }
 
 export type DaySessionStatus = "NOT_STARTED" | "OPEN" | "PREVIOUS_DAY_STILL_OPEN" | "CLOSED";
@@ -99,5 +110,6 @@ export interface TrackerState {
   dayCloseSnapshot: DayCloseSnapshot | null;
   reopenEligibility: ReopenEligibility;
   historySales: SaleRecord[];
+  expenses: DayExpense[];
   lastUpdatedAt: string;
 }

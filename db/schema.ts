@@ -106,6 +106,17 @@ export const fullCommissionRewards = sqliteTable("full_commission_rewards", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const dayExpenses = sqliteTable("day_expenses", {
+  id: text("id").primaryKey(),
+  daySessionId: text("day_session_id").notNull().references(() => daySessions.id),
+  category: text("category", { enum: ["Petrol", "Food", "Other"] }).notNull(),
+  amountPaise: integer("amount_paise").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  index("day_expenses_session_category_idx").on(table.daySessionId, table.category),
+]);
+
+
 export const dayClosures = sqliteTable("day_closures", {
   id: text("id").primaryKey(),
   businessDate: text("business_date").notNull().unique(),
@@ -114,6 +125,7 @@ export const dayClosures = sqliteTable("day_closures", {
   totalNormalCommissionPaise: integer("total_normal_commission_paise").notNull(),
   totalFullCommissionPaise: integer("total_full_commission_paise").notNull(),
   totalEarningsPaise: integer("total_earnings_paise").notNull(),
+  totalExpensesPaise: integer("total_expenses_paise").notNull().default(0),
   netCollectionPaise: integer("net_collection_paise").notNull(),
   reportText: text("report_text").notNull(),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -130,6 +142,7 @@ export const dayCloseSnapshots = sqliteTable("day_close_snapshots", {
   totalNormalCommissionPaise: integer("total_normal_commission_paise").notNull(),
   totalOfferEarningsPaise: integer("total_offer_earnings_paise").notNull(),
   totalEarningsPaise: integer("total_earnings_paise").notNull(),
+  totalExpensesPaise: integer("total_expenses_paise").notNull().default(0),
   netCollectionPaise: integer("net_collection_paise").notNull(),
   snapshotJson: text("snapshot_json").notNull(),
   reportText: text("report_text").notNull(),

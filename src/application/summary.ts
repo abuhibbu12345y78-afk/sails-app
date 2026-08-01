@@ -8,6 +8,7 @@ export function summarizeSales(sales: SaleRecord[]): DashboardSummary {
     totalFullCommissionPaise: total.totalFullCommissionPaise + sale.totalFullCommissionPaise,
     totalEarningsPaise: total.totalEarningsPaise + sale.totalEarningsPaise,
     netCollectionPaise: total.netCollectionPaise + sale.netCollectionPaise,
+    totalExpensesPaise: total.totalExpensesPaise,
   }), {
     totalUnits: 0,
     grossSalesPaise: 0,
@@ -15,5 +16,6 @@ export function summarizeSales(sales: SaleRecord[]): DashboardSummary {
     totalFullCommissionPaise: 0,
     totalEarningsPaise: 0,
     netCollectionPaise: 0,
+    totalExpensesPaise: 0,
   });
 }
