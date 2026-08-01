@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { ensureDatabase, getDatabaseTime, parseDatabaseTimestamp, businessDate } from "./database";
+import { ensureDatabase, getDatabaseTime, parseDatabaseTimestamp } from "./database";
 import { DEFAULT_BUSINESS_TIMEZONE } from "../../domain/business-time";
 import { DomainError } from "../../application/errors";
 import {
@@ -21,8 +20,8 @@ import {
 } from "../../application/repositories";
 import type { AppSettings, DayCloseSnapshot, DaySession, DaySessionStatus, DayStockItem, SaleRecord, TrackerState, TrustedTimeState } from "../../application/contracts";
 import { calculateSale, formatCurrency } from "../../domain/commission";
-import { validateDailySale, previewAdditionalPickup, isDateChangeWarning, resolveOpeningState, canReopenCurrentDay } from "../../domain/day-session";
-import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase, previewAdditionalPickupUseCase } from "../../application/business-day-use-cases";
+import { validateDailySale } from "../../domain/day-session";
+import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase, previewAdditionalPickupUseCase, canResetBusinessDayUseCase } from "../../application/business-day-use-cases";
 import { summarizeSales } from "../../application/summary";
 
 type Row = Record<string, string | number | null>;
@@ -330,6 +329,37 @@ export class D1DaySessionRepository implements DaySessionRepository {
   async submitHistoricalData(_input: HistoricalDataInput): Promise<HistoricalDataResult> {
     throw new Error("Historical data entry is not currently supported on SQLite/D1. Please use Supabase.");
   }
+
+  async resetBusinessDay(sessionId: string): Promise<void> {
+    const db = await ensureDatabase();
+    const session = await db.prepare("SELECT * FROM day_sessions WHERE id = ?").bind(sessionId).first<Row>();
+    if (!session) throw new DomainError("The Business Day could not be found.", 404);
+
+    const [later, countRow] = await Promise.all([
+      db.prepare("SELECT id FROM day_sessions WHERE business_date > ? LIMIT 1").bind(session.business_date).first<Row>(),
+      db.prepare("SELECT COUNT(*) as count FROM day_session_sales WHERE day_session_id = ?").bind(sessionId).first<Row>(),
+    ]);
+    
+    // We can allow reset if no sales are made. If there are sales, we delete them too? 
+    // The user requested a complete wipe. We should delete everything cascadingly.
+    // In SQLite/D1 we'll delete explicitly if no ON DELETE CASCADE is set.
+    
+    await db.batch([
+      db.prepare("DELETE FROM day_session_sales WHERE day_session_id = ?").bind(sessionId),
+      db.prepare("DELETE FROM sales WHERE id IN (SELECT sale_id FROM day_session_sales WHERE day_session_id = ?)").bind(sessionId),
+      db.prepare("DELETE FROM day_stock_items WHERE day_session_id = ?").bind(sessionId),
+      db.prepare("DELETE FROM day_stock_adjustments WHERE day_session_id = ?").bind(sessionId),
+      db.prepare("DELETE FROM day_reopens WHERE day_session_id = ?").bind(sessionId),
+      db.prepare("DELETE FROM day_close_snapshots WHERE day_session_id = ?").bind(sessionId),
+      db.prepare("DELETE FROM day_closures WHERE business_date = ?").bind(session.business_date),
+      db.prepare("DELETE FROM day_expenses WHERE day_session_id = ?").bind(sessionId),
+      db.prepare("DELETE FROM day_session_scopes WHERE day_session_id = ?").bind(sessionId),
+      db.prepare("DELETE FROM day_sessions WHERE id = ?").bind(sessionId),
+      db.prepare(`INSERT INTO audit_logs (id, action, entity_type, entity_id, metadata_json)
+        VALUES (?, 'day.reset', 'day_session', ?, ?)`)
+        .bind(crypto.randomUUID(), sessionId, JSON.stringify({ businessDate: session.business_date })),
+    ]);
+  }
 }
 
 export class D1SaleRepository implements SaleRepository {
@@ -589,6 +619,13 @@ export class D1StateRepository implements StateRepository {
       openingState: decision.openingState,
       dayCloseSnapshot,
       reopenEligibility,
+      resetEligibility: daySession
+        ? canResetBusinessDayUseCase({
+          target: daySession,
+          laterSessionExists,
+          hasPermission: true,
+        })
+        : { allowed: false, reason: "No closed Business Day is available." },
       historySales,
       expenses: [],
       lastUpdatedAt: time.serverTimeIso,

@@ -59,6 +59,20 @@ export function reopenBusinessDayUseCase(input: {
   return canReopenCurrentDay(input);
 }
 
+export function canResetBusinessDayUseCase(input: {
+  target: SessionIdentity;
+  laterSessionExists: boolean;
+  hasPermission: boolean;
+}): { allowed: boolean; reason: string | null } {
+  if (!input.hasPermission) {
+    return { allowed: false, reason: "Insufficient permissions to reset the day." };
+  }
+  if (input.laterSessionExists) {
+    return { allowed: false, reason: "Cannot reset a day because a newer session already exists." };
+  }
+  return { allowed: true, reason: null };
+}
+
 export function previewAdditionalPickupUseCase(
   stockItems: DaySession["stockItems"],
   quantities: ReadonlyArray<{ productId: string; additionalQuantity: number }>,

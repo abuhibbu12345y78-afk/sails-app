@@ -30,7 +30,7 @@ import { parseDatabaseTimestamp } from "./client";
 import { getActiveContext } from "./context";
 import { DEFAULT_BUSINESS_TIMEZONE } from "../../domain/business-time";
 import { summarizeSales } from "../../application/summary";
-import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase } from "../../application/business-day-use-cases";
+import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase, canResetBusinessDayUseCase } from "../../application/business-day-use-cases";
 
 type DbRow = Record<string, unknown>;
 
@@ -271,6 +271,74 @@ export class SupabaseDaySessionRepository implements DaySessionRepository {
     }
 
     return { sessionId: String(data.id) };
+  }
+
+  async resetBusinessDay(sessionId: string): Promise<void> {
+    const supabase = createAdminClient();
+    const context = await getActiveContext(supabase);
+
+    // Verify session exists and belongs to the salesman
+    const { data: session, error: sessErr } = await supabase
+      .from('day_sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .eq('salesman_id', context.salesmanId)
+      .single();
+      
+    if (sessErr || !session) {
+      throw new DomainError("The Business Day could not be found.", 404);
+    }
+
+    // Check for newer sessions
+    const { data: laterSession } = await supabase
+      .from('day_sessions')
+      .select('id')
+      .eq('salesman_id', context.salesmanId)
+      .gt('business_date', session.business_date)
+      .limit(1);
+
+    if (laterSession && laterSession.length > 0) {
+      throw new DomainError("Cannot reset a day because a newer session already exists.");
+    }
+
+    // Perform deletions in correct dependency order (children first)
+    // 1. Delete sales records. We first get sale IDs.
+    const { data: sessionSales } = await supabase
+      .from('day_session_sales')
+      .select('sale_id')
+      .eq('day_session_id', sessionId);
+      
+    if (sessionSales && sessionSales.length > 0) {
+      const saleIds = sessionSales.map((s: any) => s.sale_id);
+      await supabase.from('full_commission_rewards').delete().in('sale_id', saleIds);
+      await supabase.from('day_session_sales').delete().eq('day_session_id', sessionId);
+      await supabase.from('sales').delete().in('id', saleIds);
+    }
+    
+    // Also delete any sales referencing day_session_id directly
+    await supabase.from('sales').delete().eq('day_session_id', sessionId);
+
+    // 2. Delete stock adjustments, items, expenses, reopens, and closures
+    await supabase.from('day_expenses').delete().eq('day_session_id', sessionId);
+    await supabase.from('day_stock_adjustments').delete().eq('day_session_id', sessionId);
+    await supabase.from('day_stock_items').delete().eq('day_session_id', sessionId);
+    await supabase.from('day_reopens').delete().eq('day_session_id', sessionId);
+    await supabase.from('day_closures').delete().eq('salesman_id', context.salesmanId).eq('business_date', session.business_date);
+    
+    // 3. Delete session scopes and the session itself
+    await supabase.from('day_session_scopes').delete().eq('day_session_id', sessionId);
+    const { error: deleteErr } = await supabase.from('day_sessions').delete().eq('id', sessionId);
+    if (deleteErr) {
+      throw new Error(`Failed to delete day session: ${deleteErr.message}`);
+    }
+
+    // 4. Log the audit event
+    await supabase.from('audit_logs').insert({
+      action: 'day.reset',
+      entity_type: 'day_session',
+      entity_id: sessionId,
+      metadata_json: { businessDate: session.business_date }
+    });
   }
 }
 
@@ -516,6 +584,13 @@ export class SupabaseStateRepository implements StateRepository {
       historySales,
       expenses: [],
       reopenEligibility,
+      resetEligibility: daySession
+        ? canResetBusinessDayUseCase({
+          target: daySession,
+          laterSessionExists,
+          hasPermission: true,
+        })
+        : { allowed: false, reason: "No closed Business Day is available." },
       lastUpdatedAt: time.serverTimeIso,
     };
   }

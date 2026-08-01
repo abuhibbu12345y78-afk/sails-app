@@ -1,7 +1,18 @@
-// @ts-nocheck
 import { getRawDb } from "../../../db";
 import { PRODUCT_SEED } from "../../domain/products";
 import { DEFAULT_BUSINESS_TIMEZONE, toBusinessDate } from "../../domain/business-time";
+
+/** Minimal D1-compatible interface so repositories can use generic .first<T>() / .all<T>() */
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
+  run(): Promise<void>;
+}
+interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  batch(statements: D1PreparedStatement[]): Promise<unknown[]>;
+}
 
 let initialized = false;
 
@@ -107,8 +118,8 @@ const schemaStatements = [
   )`,
 ];
 
-export async function ensureDatabase() {
-  if (initialized) return getRawDb();
+export async function ensureDatabase(): Promise<D1Database> {
+  if (initialized) return getRawDb() as D1Database;
   const db = getRawDb();
   await db.batch(schemaStatements.map((statement) => db.prepare(statement)));
   await db.batch([
@@ -139,7 +150,7 @@ export async function ensureDatabase() {
     db.prepare("UPDATE settings SET business_name = 'AL QUWWA' WHERE id = 'default' AND business_name = 'Sales Commission'"),
   ]);
   initialized = true;
-  return db;
+  return db as D1Database;
 }
 
 export function businessDate(timeZone = DEFAULT_BUSINESS_TIMEZONE, date = new Date()) {

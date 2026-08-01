@@ -81,6 +81,7 @@ export interface DaySessionRepository {
   reopenDaySession(input: ReopenDayInput): Promise<ReopenDayResult>;
   additionalPickup(input: AdditionalPickupInput): Promise<AdditionalPickupResult>;
   submitHistoricalData(input: HistoricalDataInput): Promise<HistoricalDataResult>;
+  resetBusinessDay(sessionId: string): Promise<void>;
 }
 
 export interface CreateSaleInput {

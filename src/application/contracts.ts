@@ -109,6 +109,7 @@ export interface TrackerState {
   openingState: OpeningState;
   dayCloseSnapshot: DayCloseSnapshot | null;
   reopenEligibility: ReopenEligibility;
+  resetEligibility: ReopenEligibility;
   historySales: SaleRecord[];
   expenses: DayExpense[];
   lastUpdatedAt: string;

@@ -325,8 +325,10 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
   showToast: (toast: ToastState) => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [reopening, setReopening] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const session = state.daySession;
   if (!session) return null;
   const sessionId = session.id;
@@ -365,6 +367,25 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
     }
   }
 
+  async function resetDay() {
+    if (!state.resetEligibility.allowed || resetting) return;
+    setResetting(true);
+    try {
+      await api("/api/day-reset", {
+        method: "POST",
+        body: JSON.stringify({ sessionId }),
+      });
+      await reload(true);
+      setResetDialogOpen(false);
+      showToast({ message: "Business day reset successfully." });
+      navigate("home");
+    } catch (resetError) {
+      showToast({ message: resetError instanceof Error ? resetError.message : "The Business Day could not be reset.", error: true });
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return <div className="decision-screen">
     <p className="landing-brand">AL QUWWA</p>
     <TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
@@ -390,8 +411,10 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
         <button className="secondary-button" onClick={() => navigate("dashboard")}>VIEW DAY SUMMARY</button>
         <button className="secondary-button" onClick={openWhatsAppReport}>OPEN WHATSAPP REPORT</button>
         {state.reopenEligibility.allowed && <button className="primary-button" onClick={() => setDialogOpen(true)}>REOPEN CURRENT DAY</button>}
+        {state.resetEligibility.allowed && <button className="danger-button" onClick={() => setResetDialogOpen(true)}>RESET CURRENT DAY</button>}
       </div>
       {!state.reopenEligibility.allowed && state.reopenEligibility.reason && <p className="eligibility-note">{state.reopenEligibility.reason}</p>}
+      {!state.resetEligibility.allowed && state.resetEligibility.reason && state.resetEligibility.reason !== state.reopenEligibility.reason && <p className="eligibility-note">{state.resetEligibility.reason}</p>}
     </section>
     <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <AlertDialogContent>
@@ -420,6 +443,33 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
           <AlertDialogAction disabled={reason.trim().length < 8 || reopening} onClick={(event) => { event.preventDefault(); void reopenDay(); }}>
             {reopening ? "REOPENING…" : "REOPEN CURRENT DAY"}
           </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle className="danger-text">Reset Current Business Day?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to completely wipe the current Business Day?
+            This will permanently delete the day session, all stock tracking, and reset the state as if the day was never started.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="dialog-summary">
+          <span>Business Date <strong>{session.businessDate}</strong></span>
+          <span>Original Start <strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></span>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={resetting}>CANCEL</AlertDialogCancel>
+          <button
+            className="danger-button"
+            disabled={resetting}
+            onClick={(event) => { event.preventDefault(); void resetDay(); }}
+            style={{ width: 'auto' }}
+          >
+            {resetting ? "RESETTING…" : "RESET CURRENT DAY"}
+          </button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -746,13 +796,33 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
   const [pickup, setPickup] = useState<Record<string, number>>({});
   const [sales, setSales] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+
+  const hasDraftData = date !== "" || Object.values(pickup).some(q => q > 0) || Object.values(sales).some(q => q > 0);
+
+  function cancelDraft() {
+    setStep("date");
+    setDate("");
+    setPickup({});
+    setSales({});
+    setCancelConfirmOpen(false);
+    navigate("settings");
+  }
+
+  function requestCancel() {
+    if (hasDraftData) {
+      setCancelConfirmOpen(true);
+    } else {
+      cancelDraft();
+    }
+  }
 
   async function submit() {
     setSubmitting(true);
     try {
-      const pickupItems = Object.entries(pickup).filter(([_, q]) => q > 0).map(([id, q]) => ({ productId: id, pickedQuantity: q }));
-      const salesItems = Object.entries(sales).filter(([_, q]) => q > 0).map(([id, q]) => ({ productId: id, quantity: q }));
-      
+      const pickupItems = Object.entries(pickup).filter(([, q]) => q > 0).map(([id, q]) => ({ productId: id, pickedQuantity: q }));
+      const salesItems = Object.entries(sales).filter(([, q]) => q > 0).map(([id, q]) => ({ productId: id, quantity: q }));
+
       await api("/api/historical-entry", {
         method: "POST",
         body: JSON.stringify({ businessDate: date, pickupItems, salesItems })
@@ -769,20 +839,38 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
 
   const products = state.products;
 
+  const CancelDraftDialog = (
+    <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel Historical Draft?</AlertDialogTitle>
+          <AlertDialogDescription>All unsaved draft data will be discarded. Confirmed historical records already saved to the database will not be affected.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>KEEP EDITING</AlertDialogCancel>
+          <AlertDialogAction onClick={cancelDraft}>DISCARD DRAFT</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   if (step === "date") {
     return <><PageTitle title="Previous Business Data" navigate={() => navigate("settings")} />
+      {CancelDraftDialog}
       <section className="settings-card">
         <p className="eyebrow" style={{ marginBottom: "1rem" }}>SELECT PAST DATE</p>
         <div className="field">
           <input type="date" max={new Date().toISOString().split("T")[0]} value={date} onChange={e => setDate(e.target.value)} />
         </div>
         <button className="primary-button full-width" disabled={!date} onClick={() => setStep("pickup")}>Next: Stock Pickup</button>
+        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>CANCEL DRAFT</button>
       </section>
     </>;
   }
 
   if (step === "pickup") {
     return <><PageTitle title="Stock Pickup" navigate={() => setStep("date")} />
+      {CancelDraftDialog}
       <section className="settings-card">
         <p className="eyebrow" style={{ marginBottom: "1rem" }}>ENTER STARTING STOCK FOR {date}</p>
         {products.map(p => (
@@ -792,12 +880,14 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
           </div>
         ))}
         <button className="primary-button full-width" onClick={() => setStep("sales")}>Next: Sales</button>
+        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>CANCEL DRAFT</button>
       </section>
     </>;
   }
 
   if (step === "sales") {
     return <><PageTitle title="Sales" navigate={() => setStep("pickup")} />
+      {CancelDraftDialog}
       <section className="settings-card">
         <p className="eyebrow" style={{ marginBottom: "1rem" }}>ENTER TOTAL SALES FOR {date}</p>
         {products.map(p => {
@@ -809,11 +899,13 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
           </div>;
         })}
         <button className="primary-button full-width" onClick={() => setStep("review")}>Next: Review</button>
+        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>CANCEL DRAFT</button>
       </section>
     </>;
   }
 
   return <><PageTitle title="Review" navigate={() => setStep("sales")} />
+    {CancelDraftDialog}
     <section className="settings-card">
       <p className="eyebrow" style={{ marginBottom: "1rem" }}>CONFIRM HISTORICAL DATA FOR {date}</p>
       <div className="summary-list">
@@ -827,10 +919,11 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
           </div>
         ))}
       </div>
-      <div style={{ marginTop: "2rem" }}>
+      <div style={{ marginTop: "2rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <button className="primary-button full-width" disabled={submitting} onClick={() => void submit()}>
           {submitting ? "SAVING..." : "CONFIRM AND SAVE"}
         </button>
+        <button className="secondary-button full-width" disabled={submitting} onClick={requestCancel}>CANCEL DRAFT</button>
       </div>
     </section>
   </>;
