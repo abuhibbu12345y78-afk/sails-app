@@ -558,10 +558,12 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
         body: JSON.stringify({
           sessionId,
           reason: reason.trim(),
-          items: state.products.map((product) => ({
-            productId: product.id,
-            additionalQuantity: quantities[product.id] ?? 0,
-          })),
+          items: state.products
+            .map((product) => ({
+              productId: product.id,
+              additionalQuantity: quantities[product.id] ?? 0,
+            }))
+            .filter((item) => item.additionalQuantity > 0),
         }),
       });
       await reload(true);

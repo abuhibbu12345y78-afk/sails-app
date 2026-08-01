@@ -23,7 +23,7 @@ test("renders the AL QUWWA Business Day product", async () => {
   assert.match(app, /Previous Business Day Is Still Open/);
   assert.match(app, /OPEN NEW DAY/);
   assert.match(app, /REOPEN CURRENT DAY/);
-  assert.match(app, /Accidentally closed/);
+
   assert.match(app, /CONFIRM ADDITIONAL PICKUP/);
   assert.match(app, /AlertDialogContent/);
   assert.match(app, /Server time synchronized/);

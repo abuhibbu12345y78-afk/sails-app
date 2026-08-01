@@ -285,7 +285,7 @@ export class D1DaySessionRepository implements DaySessionRepository {
       remainingQuantity: Number(row.remaining_quantity),
     }));
     const activeIds = new Set(stockResult.results.filter((row) => Number(row.active) === 1).map((row) => String(row.product_id)));
-    if (input.items.some((item) => !activeIds.has(item.productId))) {
+    if (input.items.some((item) => item.additionalQuantity > 0 && !activeIds.has(item.productId))) {
       throw new DomainError("One or more products are unavailable.", 400);
     }
     const preview = previewAdditionalPickupUseCase(stockItems, input.items);
