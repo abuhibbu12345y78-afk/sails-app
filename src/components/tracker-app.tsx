@@ -1,5 +1,7 @@
 "use client";
 
+import { ml } from "../lib/ui-text-ml";
+
 import {
   AlertTriangle, ArrowLeft, BarChart3, Boxes, CalendarCheck, Check,
   ChevronRight, Clock3, CloudOff, Gift, History, Home, IndianRupee, Minus,
@@ -42,7 +44,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 function sessionLabel(status: TrackerState["daySessionStatus"]) {
   return {
-    NOT_STARTED: "Not Started",
+    NOT_STARTED: `Not ${ml.labels.started}`,
     OPEN: "Open",
     PREVIOUS_DAY_STILL_OPEN: "Previous Day Still Open",
     CLOSED: "Closed",
@@ -182,7 +184,7 @@ function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps 
       {!isSessionOpen ? (
         <section className="settings-card">
           <p style={{ textAlign: "center", color: "var(--muted)" }}>
-            Expenses can only be added to an active business day. Start a day to record expenses.
+            {ml.messages.expensesCanOnlyBeAddedToActive}
           </p>
         </section>
       ) : (
@@ -394,7 +396,7 @@ export function TrackerApp() {
     if (next === "sale" && state?.daySessionStatus !== "OPEN") {
       if (state?.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN") {
         setScreen("day-close");
-        setToast({ message: "Close the previous business day before recording new sales.", error: true });
+        setToast({ message: "{ml.messages.closePreviousDayWarning}", error: true });
       } else if (state?.daySessionStatus === "NOT_STARTED") {
         setScreen("start-day");
       } else {
@@ -464,7 +466,7 @@ export function TrackerApp() {
         {screen === "home" && <HomeScreen {...timeProps} state={state} money={money} navigate={navigate} dateChanged={dateChanged} reload={load} showToast={setToast} />}
         {screen === "start-day" && <StartDayScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "additional-pickup" && <AdditionalPickupScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
-        {screen === "sale" && <SaleScreen state={state} money={money} navigate={navigate} openSale={openSale} dateChanged={dateChanged} />}
+        {screen === "sale" && <SaleScreen state={state} money={money} navigate={navigate} openSale={openSale} dateChanged={dateChanged} reload={load} showToast={setToast} />}
         {screen === "dashboard" && <DashboardScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} />}
         {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} reload={load} showToast={setToast} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
         {screen === "history" && <HistoryScreen state={state} money={money} navigate={navigate} reload={load} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
@@ -556,7 +558,7 @@ function HomeSummaryCard({ state, clock, trustedTime, money }: TimeProps & { mon
 function PreviousDayWarning({ state, navigate, money, formatTime }: { state: TrackerState; navigate: (screen: Screen) => void; money: (value: number) => string; formatTime: (date: Date) => string }) {
   if (!state.daySession || state.daySessionStatus !== "PREVIOUS_DAY_STILL_OPEN") return null;
   return <section className="warning-card">
-    <div className="warning-title"><AlertTriangle size={22} /><div><h2>Previous Business Day Is Still Open</h2><p>{state.daySession.businessDate} · Started {formatTime(new Date(state.daySession.startedAt))}. Close it before starting a new business day.</p></div></div>
+    <div className="warning-title"><AlertTriangle size={22} /><div><h2>Previous Business Day Is Still Open</h2><p>{state.daySession.businessDate} · {ml.labels.started} {formatTime(new Date(state.daySession.startedAt))}. Close it before starting a new business day.</p></div></div>
     <div className="stock-summary">{state.daySession.stockItems.map((item) => <div key={item.id}><strong>{item.productName}</strong><span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span></div>)}</div>
     <div className="warning-finance"><span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span><span>Normal Commission <strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></span><span>Offers Earned <strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></span><span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span><span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span></div>
     <div className="warning-actions"><button className="secondary-button" onClick={() => navigate("dashboard")}>View Previous Day</button><button className="danger-button" onClick={() => navigate("day-close")}>Close Previous Day</button></div>
@@ -570,14 +572,14 @@ function PreviousOpenLanding({ state, clock, trustedTime, money, navigate }: Tim
   const session = state.daySession;
   if (!session) return null;
   return <div className="decision-screen">
-    <p className="landing-brand">AL QUWWA</p>
+    <p className="landing-brand">{ml.labels.alQuwwa}</p>
     <section className="warning-card blocking-warning">
       <div className="warning-title"><AlertTriangle size={28} /><div>
         <h1>Previous Business Day Is Still Open</h1>
         <p>Close this Business Day manually before opening {clock.formatDate(trustedTime)}.</p>
       </div></div>
       <div className="session-timing compact-grid">
-        <div><span>Previous Business Date</span><strong>{session.businessDate}</strong></div>
+        <div><span>{ml.labels.previousBusinessDate}</span><strong>{session.businessDate}</strong></div>
         <div><span>Day Start</span><strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></div>
       </div>
       <div className="stock-summary detailed-stock">{session.stockItems.map((item) => <div key={item.id}>
@@ -592,8 +594,8 @@ function PreviousOpenLanding({ state, clock, trustedTime, money, navigate }: Tim
         <span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span>
       </div>
       <div className="warning-actions">
-        <button className="secondary-button" onClick={() => navigate("dashboard")}>VIEW PREVIOUS DAY</button>
-        <button className="danger-button" onClick={() => navigate("day-close")}>CLOSE PREVIOUS DAY</button>
+        <button className="secondary-button" onClick={() => navigate("dashboard")}>{ml.labels.viewPreviousDayCaps}</button>
+        <button className="danger-button" onClick={() => navigate("day-close")}>{ml.labels.closePreviousDayCaps}</button>
       </div>
     </section>
   </div>;
@@ -602,11 +604,11 @@ function PreviousOpenLanding({ state, clock, trustedTime, money, navigate }: Tim
 function NewDayLanding({ state, clock, trustedTime, navigate }: TimeProps & { navigate: (screen: Screen) => void }) {
   return <div className="new-day-landing">
     <div className="landing-mark"><CalendarCheck size={28} /></div>
-    <p className="landing-brand">AL QUWWA</p>
+    <p className="landing-brand">{ml.labels.alQuwwa}</p>
     <h1>{clock.formatDate(trustedTime)}</h1>
     <p className="landing-time">{clock.formatTime(trustedTime, false)}</p>
     <div className="time-meta landing-sync"><span className={`sync-dot${clock.synchronized ? " online" : ""}`} />{clock.synchronized ? "Server time synchronized" : "Waiting for trusted server time"}</div>
-    <p className="landing-message">No business day has been started today.</p>
+    <p className="landing-message">{ml.messages.noBusinessDayStarted}</p>
     <button className="primary-button landing-primary" disabled={!clock.synchronized || state.daySessionStatus !== "NOT_STARTED"} onClick={() => navigate("start-day")}>
       <Play size={22} /> OPEN NEW DAY
     </button>
@@ -682,15 +684,15 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
   }
 
   return <div className="decision-screen">
-    <p className="landing-brand">AL QUWWA</p>
+    <p className="landing-brand">{ml.labels.alQuwwa}</p>
     <TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
     <section className="closed-day-card">
       <div className="closed-day-heading"><CalendarCheck size={25} /><div><h1>Business Day Closed</h1><p>Another session cannot be created for {session.businessDate}.</p></div></div>
       <div className="session-timing compact-grid">
-        <div><span>Business Date</span><strong>{session.businessDate}</strong></div>
-        <div><span>Started</span><strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></div>
+        <div><span>{ml.labels.businessDate}</span><strong>{session.businessDate}</strong></div>
+        <div><span>{ml.labels.started}</span><strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></div>
         <div><span>Closed</span><strong>{session.closedAt ? clock.formatTime(new Date(session.closedAt), false) : "—"}</strong></div>
-        <div><span>Reopened</span><strong>{session.reopenCount} time{session.reopenCount === 1 ? "" : "s"}</strong></div>
+        <div><span>{ml.labels.reopened}</span><strong>{session.reopenCount} time{session.reopenCount === 1 ? "" : "s"}</strong></div>
       </div>
       <div className="stock-summary detailed-stock">{session.stockItems.map((item) => <div key={item.id}>
         <strong>{item.productName}</strong><span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span>
@@ -703,10 +705,10 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
         <span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span>
       </div>
       <div className="closed-actions">
-        <button className="secondary-button" onClick={() => navigate("dashboard")}>VIEW DAY SUMMARY</button>
-        <button className="secondary-button" onClick={openWhatsAppReport}>OPEN WHATSAPP REPORT</button>
-        {state.reopenEligibility.allowed && <button className="primary-button" onClick={() => setDialogOpen(true)}>REOPEN CURRENT DAY</button>}
-        {state.resetEligibility.allowed && <button className="danger-button" onClick={() => setResetDialogOpen(true)}>RESET CURRENT DAY</button>}
+        <button className="secondary-button" onClick={() => navigate("dashboard")}>{ml.actions.viewDaySummary}</button>
+        <button className="secondary-button" onClick={openWhatsAppReport}>{ml.actions.openWhatsappReport}</button>
+        {state.reopenEligibility.allowed && <button className="primary-button" onClick={() => setDialogOpen(true)}>{ml.actions.reopenCurrentDayCaps}</button>}
+        {state.resetEligibility.allowed && <button className="danger-button" onClick={() => setResetDialogOpen(true)}>{ml.actions.resetCurrentDayCaps}</button>}
       </div>
       {!state.reopenEligibility.allowed && state.reopenEligibility.reason && <p className="eligibility-note">{state.reopenEligibility.reason}</p>}
       {!state.resetEligibility.allowed && state.resetEligibility.reason && state.resetEligibility.reason !== state.reopenEligibility.reason && <p className="eligibility-note">{state.resetEligibility.reason}</p>}
@@ -714,11 +716,11 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
     <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Reopen Current Business Day?</AlertDialogTitle>
-          <AlertDialogDescription>This Business Day has already been closed. Reopening it will allow additional product pickup and new sales. Existing records remain unchanged; the previous close summary and WhatsApp report become outdated.</AlertDialogDescription>
+          <AlertDialogTitle>{ml.messages.reopenCurrentBusinessDay}</AlertDialogTitle>
+          <AlertDialogDescription>{ml.messages.businessDayAlreadyClosedReopen}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="dialog-summary">
-          <span>Business Date <strong>{session.businessDate}</strong></span>
+          <span>{ml.labels.businessDate} <strong>{session.businessDate}</strong></span>
           <span>Original Start <strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></span>
           <span>Original Close <strong>{session.closedAt ? clock.formatTime(new Date(session.closedAt), false) : "—"}</strong></span>
           <span>Total Picked <strong>{session.stockItems.reduce((sum, item) => sum + item.pickedQuantity, 0)}</strong></span>
@@ -730,7 +732,7 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
           <span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span>
           <span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span>
         </div>
-        <label className="dialog-field">Mandatory reopen reason
+        <label className="dialog-field">{ml.messages.mandatoryReopenReason}
           <textarea value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} placeholder="Why must this Business Day be reopened?" />
         </label>
         <AlertDialogFooter>
@@ -745,14 +747,14 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
     <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="danger-text">Reset Current Business Day?</AlertDialogTitle>
+          <AlertDialogTitle className="danger-text">{ml.messages.resetCurrentBusinessDay}</AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to completely wipe the current Business Day?
-            This will permanently delete the day session, all stock tracking, and reset the state as if the day was never started.
+            {ml.messages.sureYouWantToWipeBusinessDay}
+            
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="dialog-summary">
-          <span>Business Date <strong>{session.businessDate}</strong></span>
+          <span>{ml.labels.businessDate} <strong>{session.businessDate}</strong></span>
           <span>Original Start <strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></span>
         </div>
         <AlertDialogFooter>
@@ -797,15 +799,15 @@ function HomeScreen({ state, clock, trustedTime, money, navigate, dateChanged, r
   return <>
     <Header state={state} />
     <HomeSummaryCard state={state} clock={clock} trustedTime={trustedTime} money={money} />
-    {dateChanged && state.daySessionStatus === "OPEN" && <section className="warning-card"><div className="warning-title"><AlertTriangle size={22} /><div><h2>The calendar date has changed</h2><p>The previous business day remains open and unchanged. Close {state.daySession?.businessDate} before starting the new day.</p></div></div><div className="warning-actions"><button className="secondary-button" onClick={() => navigate("dashboard")}>View Previous Day</button><button className="danger-button" onClick={() => navigate("day-close")}>Close Previous Day</button></div></section>}
+    {dateChanged && state.daySessionStatus === "OPEN" && <section className="warning-card"><div className="warning-title"><AlertTriangle size={22} /><div><h2>{ml.messages.calendarDateChanged}</h2><p>The previous business day remains open and unchanged. Close {state.daySession?.businessDate} before starting the new day.</p></div></div><div className="warning-actions"><button className="secondary-button" onClick={() => navigate("dashboard")}>View Previous Day</button><button className="danger-button" onClick={() => navigate("day-close")}>Close Previous Day</button></div></section>}
     <PreviousDayWarning state={state} navigate={navigate} money={money} formatTime={(date) => clock.formatTime(date, false)} />
     <section className="home-actions">
-      <div className="section-head"><div><h2>What would you like to do?</h2><p>Choose an action to get started.</p></div></div>
+      <div className="section-head"><div><h2>{ml.messages.whatWouldYouLikeToDo}</h2><p>{ml.messages.chooseActionToGetStarted}</p></div></div>
       <div className="action-grid">{actions.map(({ screen, icon: Icon, title, text }) =>
         <button className="action-card" key={screen} onClick={() => navigate(screen)}>
           <span className="icon-tile"><Icon size={22} /></span><h3>{title}</h3><p>{text}</p>
         </button>)}</div>
-      <div className="section-head"><div><h2>End of day</h2><p>Review totals before closing.</p></div></div>
+      <div className="section-head"><div><h2>{ml.messages.endOfDay}</h2><p>{ml.messages.reviewTotalsBeforeClosing}</p></div></div>
       <button className="secondary-button full-width" onClick={() => navigate("day-close")}><CalendarCheck size={20} /> Day Close <ChevronRight size={18} /></button>
     </section>
   </>;
@@ -840,9 +842,9 @@ function StartDayScreen({ state, clock, trustedTime, navigate, reload, showToast
       showToast({ message: startError instanceof Error ? startError.message : "The business day could not be started.", error: true });
     } finally { setStarting(false); }
   }
-  return <><PageTitle title="Daily Product Pickup" navigate={navigate} /><p className="landing-brand">AL QUWWA</p><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
-    {!canStart && <section className="warning-card"><div className="warning-title"><AlertTriangle /><div><h2>New day unavailable</h2><p>{state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" ? "Close the previous day first." : "This business date has already been started."}</p></div></div></section>}
-    <div className="section-head"><div><h2>Select today’s picked quantities</h2><p>Products left at 0 are not picked today.</p></div></div>
+  return <><PageTitle title="Daily Product Pickup" navigate={navigate} /><p className="landing-brand">{ml.labels.alQuwwa}</p><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
+    {!canStart && <section className="warning-card"><div className="warning-title"><AlertTriangle /><div><h2>{ml.messages.newDayUnavailable}</h2><p>{state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" ? "Close the previous day first." : "This business date has already been started."}</p></div></div></section>}
+    <div className="section-head"><div><h2>{ml.messages.selectTodaysPickedQuantities}</h2><p>{ml.messages.productsLeftAt0NotPicked}</p></div></div>
     <div className="pickup-list">{state.products.map((product) => {
       const value = quantities[product.id] ?? 0;
       return <article className="pickup-card" key={product.id}><div><strong>{product.name}</strong><span>Commission progress continues at {product.progress} / {product.rewardThreshold}</span></div><div className="mini-quantity"><button aria-label={`Decrease ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.max(0, value - 1) })}><Minus /></button><strong>{value}</strong><button aria-label={`Increase ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.min(9999, value + 1) })}><Plus /></button></div></article>;
@@ -851,15 +853,15 @@ function StartDayScreen({ state, clock, trustedTime, navigate, reload, showToast
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Confirm & Start Day?</AlertDialogTitle>
-          <AlertDialogDescription>A new Business Day will be created only after this confirmation. Previous quantities and remaining stock are not copied.</AlertDialogDescription>
+          <AlertDialogTitle>{ml.messages.confirmAndStartDay}</AlertDialogTitle>
+          <AlertDialogDescription>{ml.messages.newBusinessDayCreatedAfterConfirmation}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="dialog-summary">
-          <span>Business Date <strong>{clock.formatDate(trustedTime)}</strong></span>
-          <span>Products Selected <strong>{selectedItems.length}</strong></span>
-          <span>Total Picked Units <strong>{totalPickedUnits}</strong></span>
+          <span>{ml.labels.businessDate} <strong>{clock.formatDate(trustedTime)}</strong></span>
+          <span>{ml.labels.productsSelected} <strong>{selectedItems.length}</strong></span>
+          <span>{ml.labels.totalPickedUnits} <strong>{totalPickedUnits}</strong></span>
         </div>
-        <div className="dialog-product-list">{selectedItems.length ? selectedItems.map(({ product, quantity }) => <span key={product.id}>{product.name}<strong>{quantity}</strong></span>) : <p>All products will start at zero picked quantity.</p>}</div>
+        <div className="dialog-product-list">{selectedItems.length ? selectedItems.map(({ product, quantity }) => <span key={product.id}>{product.name}<strong>{quantity}</strong></span>) : <p>{ml.messages.allProductsStartAtZero}</p>}</div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={starting}>CANCEL</AlertDialogCancel>
           <AlertDialogAction disabled={starting} onClick={(event) => { event.preventDefault(); void startDay(); }}>{starting ? "STARTING…" : "CONFIRM & START DAY"}</AlertDialogAction>
@@ -879,7 +881,7 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [savingPickup, setSavingPickup] = useState(false);
   const session = state.daySession;
-  if (!session || session.status !== "OPEN") return <section className="warning-card"><h2>Additional pickup unavailable</h2><p>Reopen the trusted current Business Day first.</p></section>;
+  if (!session || session.status !== "OPEN") return <section className="warning-card"><h2>{ml.messages.additionalPickupUnavailable}</h2><p>{ml.messages.reopenTrustedBusinessDayFirst}</p></section>;
   const sessionId = session.id;
   const stockByProduct = new Map(session.stockItems.map((item) => [item.productId, item]));
   const selected = state.products.map((product) => {
@@ -923,24 +925,24 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
     }
   }
 
-  return <><PageTitle title="Add Picked Items" navigate={navigate} /><p className="landing-brand">AL QUWWA</p><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
-    <div className="section-head"><div><h2>Additional Product Pickup</h2><p>Original pickup remains unchanged in history. Add only new quantities.</p></div></div>
+  return <><PageTitle title="Add Picked Items" navigate={navigate} /><p className="landing-brand">{ml.labels.alQuwwa}</p><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
+    <div className="section-head"><div><h2>{ml.actions.additionalPickup}</h2><p>{ml.messages.originalPickupUnchanged}</p></div></div>
     <div className="pickup-list">{state.products.map((product) => {
       const stock = stockByProduct.get(product.id);
       const value = quantities[product.id] ?? 0;
       return <article className="pickup-card pickup-adjustment" key={product.id}>
-        <div><strong>{product.name}</strong><span>Previously Picked: {stock?.pickedQuantity ?? 0} · Sold: {stock?.soldQuantity ?? 0} · Remaining: {stock?.remainingQuantity ?? 0}</span><span className="pickup-result">New Total Picked: {(stock?.pickedQuantity ?? 0) + value} · New Remaining: {(stock?.remainingQuantity ?? 0) + value}</span></div>
+        <div><strong>{product.name}</strong><span>Previously Picked: {stock?.pickedQuantity ?? 0} · Sold: {stock?.soldQuantity ?? 0} · Remaining: {stock?.remainingQuantity ?? 0}</span><span className="pickup-result">{ml.labels.newTotalPicked}: {(stock?.pickedQuantity ?? 0) + value} · {ml.labels.newRemaining}: {(stock?.remainingQuantity ?? 0) + value}</span></div>
         <div><small>Additional Pickup</small><div className="mini-quantity"><button aria-label={`Decrease additional ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.max(0, value - 1) })}><Minus /></button><strong>{value}</strong><button aria-label={`Increase additional ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.min(9999, value + 1) })}><Plus /></button></div></div>
       </article>;
     })}</div>
-    <label className="dialog-field pickup-reason">Pickup reason
+    <label className="dialog-field pickup-reason">{ml.labels.pickupReason}
       <textarea value={reason} maxLength={300} onChange={(event) => setReason(event.target.value)} />
     </label>
-    <button className="primary-button full-width sticky-action" disabled={totalAdditional < 1 || reason.trim().length < 3} onClick={() => setConfirmOpen(true)}>CONFIRM ADDITIONAL PICKUP</button>
+    <button className="primary-button full-width sticky-action" disabled={totalAdditional < 1 || reason.trim().length < 3} onClick={() => setConfirmOpen(true)}>{ml.actions.confirmAdditionalPickupCaps}</button>
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>
-        <AlertDialogHeader><AlertDialogTitle>Confirm Additional Pickup?</AlertDialogTitle><AlertDialogDescription>Review the new quantities before saving this audited stock adjustment.</AlertDialogDescription></AlertDialogHeader>
-        <div className="dialog-summary"><span>Business Date <strong>{session.businessDate}</strong></span><span>Total Additional Units <strong>{totalAdditional}</strong></span></div>
+        <AlertDialogHeader><AlertDialogTitle>Confirm Additional Pickup?</AlertDialogTitle><AlertDialogDescription>{ml.messages.reviewNewQuantitiesBeforeSaving}</AlertDialogDescription></AlertDialogHeader>
+        <div className="dialog-summary"><span>{ml.labels.businessDate} <strong>{session.businessDate}</strong></span><span>{ml.labels.totalAdditionalUnits} <strong>{totalAdditional}</strong></span></div>
         <div className="dialog-product-list">{selected.map((item) => <span key={item.product.id}>{item.product.name}: +{item.additional}<strong>Picked {item.newPicked} · Remaining {item.newRemaining}</strong></span>)}</div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={savingPickup}>CANCEL</AlertDialogCancel>
@@ -951,19 +953,163 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
   </>;
 }
 
-function SaleScreen({ state, money, navigate, openSale, dateChanged }: { state: TrackerState; money: (value: number) => string; navigate: (screen: Screen) => void; openSale: (product: Product) => void; dateChanged: boolean }) {
+function SaleExpenseEntry({ state, reload, showToast }: { state: TrackerState; reload: (silent?: boolean) => Promise<void>; showToast: (toast: ToastState) => void }) {
+  const session = state.daySession;
+  const isSessionOpen = session?.status === "OPEN";
+
+  const expenses = state.expenses || [];
+  const petrolExpense = expenses.find((e) => e.category === "Petrol");
+  const foodExpense = expenses.find((e) => e.category === "Food");
+  const otherExpenses = expenses.filter((e) => e.category === "Other");
+
+  const [petrolDraft, setPetrolDraft] = useState<string | null>(null);
+  const [foodDraft, setFoodDraft] = useState<string | null>(null);
+  
+  const [otherDescription, setOtherDescription] = useState("");
+  const [otherDraft, setOtherDraft] = useState<string | null>(null);
+
+  const [saving, setSaving] = useState(false);
+
+  const petrolRupees = petrolDraft ?? (petrolExpense ? String(petrolExpense.amountPaise / 100) : "");
+  const foodRupees = foodDraft ?? (foodExpense ? String(foodExpense.amountPaise / 100) : "");
+  const totalOtherPaise = otherExpenses.reduce((sum, e) => sum + e.amountPaise, 0);
+
+  const setPetrolPreset = (val: string) => setPetrolDraft(val);
+  const setFoodPreset = (val: string) => setFoodDraft(val);
+
+  async function handleSaveAllExpenses() {
+    if (!session || !isSessionOpen) return;
+    setSaving(true);
+    let anySaved = false;
+
+    try {
+      const petrolAmountRupees = parseFloat(petrolRupees);
+      if (!isNaN(petrolAmountRupees) && petrolAmountRupees > 0) {
+        if (!petrolExpense || petrolExpense.amountPaise !== Math.round(petrolAmountRupees * 100)) {
+           if (petrolExpense) {
+             await api("/api/expenses", { method: "POST", body: JSON.stringify({ action: "update", expenseId: petrolExpense.id, amountPaise: Math.round(petrolAmountRupees * 100) }) });
+           } else {
+             await api("/api/expenses", { method: "POST", body: JSON.stringify({ sessionId: session.id, category: "Petrol", amountPaise: Math.round(petrolAmountRupees * 100) }) });
+           }
+           anySaved = true;
+        }
+      }
+
+      const foodAmountRupees = parseFloat(foodRupees);
+      if (!isNaN(foodAmountRupees) && foodAmountRupees > 0) {
+        if (!foodExpense || foodExpense.amountPaise !== Math.round(foodAmountRupees * 100)) {
+           if (foodExpense) {
+             await api("/api/expenses", { method: "POST", body: JSON.stringify({ action: "update", expenseId: foodExpense.id, amountPaise: Math.round(foodAmountRupees * 100) }) });
+           } else {
+             await api("/api/expenses", { method: "POST", body: JSON.stringify({ sessionId: session.id, category: "Food", amountPaise: Math.round(foodAmountRupees * 100) }) });
+           }
+           anySaved = true;
+        }
+      }
+
+      const otherAmountRupees = parseFloat(otherDraft || "");
+      if (!isNaN(otherAmountRupees) && otherAmountRupees > 0) {
+        await api("/api/expenses", {
+          method: "POST",
+          body: JSON.stringify({
+            sessionId: session.id,
+            category: "Other",
+            amountPaise: Math.round(otherAmountRupees * 100),
+            description: otherDescription.trim() || undefined,
+          }),
+        });
+        setOtherDraft("");
+        setOtherDescription("");
+        anySaved = true;
+      }
+
+      if (anySaved) {
+        await reload(true);
+        showToast({ message: "Expenses saved successfully." });
+      } else if (petrolAmountRupees > 0 || foodAmountRupees > 0 || otherAmountRupees > 0) {
+        showToast({ message: "No new changes to save." });
+      }
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to save expenses", error: true });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: '2rem' }}>
+      <div className="section-head">
+        <div>
+          <h2>{ml.labels.dailyExpenses}</h2>
+          <p>{ml.messages.recordPetrolFoodAndOtherCosts}</p>
+        </div>
+      </div>
+      
+      <div className="list">
+        <article className="list-card">
+          <div className="field">
+            <label>{ml.finance.petrolExpense} (₹)</label>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <button className={`filter-button ${petrolRupees === "100" ? "active" : ""}`} onClick={() => setPetrolPreset("100")}>₹100</button>
+              <button className={`filter-button ${petrolRupees === "200" ? "active" : ""}`} onClick={() => setPetrolPreset("200")}>₹200</button>
+              <button className={`filter-button ${petrolRupees === "300" ? "active" : ""}`} onClick={() => setPetrolPreset("300")}>₹300</button>
+            </div>
+            <input type="number" min="0" step="1" placeholder="Enter amount" value={petrolRupees} onChange={(e) => setPetrolDraft(e.target.value)} disabled={saving} />
+          </div>
+        </article>
+
+        <article className="list-card">
+          <div className="field">
+            <label>{ml.finance.foodExpense} (₹)</label>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <button className={`filter-button ${foodRupees === "300" ? "active" : ""}`} onClick={() => setFoodPreset("300")}>₹300</button>
+            </div>
+            <input type="number" min="0" step="1" placeholder="Enter amount" value={foodRupees} onChange={(e) => setFoodDraft(e.target.value)} disabled={saving} />
+          </div>
+        </article>
+
+        <article className="list-card">
+          <div className="field" style={{ marginBottom: '0.8rem' }}>
+            <label>{ml.finance.otherExpense} (₹)</label>
+            <input type="number" min="0" step="1" placeholder="Amount (e.g. 50)" value={otherDraft || ""} onChange={(e) => setOtherDraft(e.target.value)} disabled={saving} />
+          </div>
+          <div className="field">
+            <input type="text" maxLength={60} placeholder={ml.labels.descriptionOptional} value={otherDescription} onChange={(e) => setOtherDescription(e.target.value)} disabled={saving} />
+          </div>
+          {totalOtherPaise > 0 && <p style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', margin: '0.5rem 0 0' }}>{ml.labels.totalOther}: ₹{totalOtherPaise / 100}</p>}
+        </article>
+
+        <button className="primary-button full-width" onClick={() => void handleSaveAllExpenses()} disabled={saving || !isSessionOpen}>
+          {saving ? "SAVING..." : ml.actions.saveExpenses.toUpperCase()}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SaleScreen({ state, money, navigate, openSale, dateChanged, reload, showToast }: { state: TrackerState; money: (value: number) => string; navigate: (screen: Screen) => void; openSale: (product: Product) => void; dateChanged: boolean; reload: (silent?: boolean) => Promise<void>; showToast: (toast: ToastState) => void }) {
   const stockMap = new Map(state.daySession?.stockItems.map((item) => [item.productId, item]) ?? []);
   return <><PageTitle title="Record a Sale" navigate={navigate} />
-    {dateChanged && <section className="warning-card"><div className="warning-title"><AlertTriangle /><div><h2>Calendar date changed</h2><p>Close the previous business day before recording new sales.</p></div></div></section>}
-    <p className="eyebrow">CHOOSE A PRODUCT</p><div className="product-grid">{state.products.map((product) => {
+    {dateChanged && <section className="warning-card"><div className="warning-title"><AlertTriangle /><div><h2>{ml.messages.calendarDateChanged}</h2><p>{ml.messages.closePreviousDayWarning}</p></div></div></section>}
+    <p className="eyebrow">{ml.messages.chooseAProduct}</p><div className="product-grid">{state.products.map((product) => {
       const stock = stockMap.get(product.id);
       const unavailable = !stock || stock.pickedQuantity === 0 || stock.remainingQuantity === 0 || dateChanged;
       return <button className="product-card" key={product.id} disabled={unavailable} onClick={() => openSale(product)}>
         <span className="product-name">{product.name}</span><span className="product-price">{money(product.sellingPricePaise)}</span>
         <span className="product-commission">{money(product.normalCommissionPaise)} Normal Commission</span>
-        <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress === product.rewardThreshold ? <><Sparkles size={12} /> Next: Offer</> : <>Cycle {product.cycleNumber}</>}</span>
-        <span className="stock-line">{stock ? `Picked ${stock.pickedQuantity} · Sold ${stock.soldQuantity} · Left ${stock.remainingQuantity}` : "Not prepared"}</span>
-        <span className="progress-row"><span>Commission Progress</span><strong>{product.progress} / {product.rewardThreshold}</strong></span>
+        <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress === product.rewardThreshold ? <><Sparkles size={12} /> {ml.labels.nextOffer}</> : <>Cycle {product.cycleNumber}</>}</span>
+        <div className="stock-strip" style={{ marginTop: '0.75rem', marginBottom: '0.2rem' }}>
+          {stock ? (
+            <>
+              <span>{ml.stock.picked} <strong>{stock.pickedQuantity}</strong></span>
+              <span><span className={stock.soldQuantity > 0 ? "highlight-red-bg" : ""}>{ml.stock.sold}</span> <strong className={stock.soldQuantity > 0 ? "highlight-red" : ""}>{stock.soldQuantity}</strong></span>
+              <span><span className={stock.remainingQuantity === 0 ? "highlight-red-bg" : ""}>{ml.stock.remaining}</span> <strong className={stock.remainingQuantity === 0 ? "highlight-red" : ""}>{stock.remainingQuantity}</strong></span>
+            </>
+          ) : (
+            <span style={{ gridColumn: 'span 3' }}>{ml.status.notPrepared}</span>
+          )}
+        </div>
+        <span className="progress-row"><span>{ml.labels.commissionProgress}</span><strong>{product.progress} / {product.rewardThreshold}</strong></span>
         <span className="progress-track"><span className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></span>
       </button>;
     })}</div></>;
@@ -1015,9 +1161,9 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate, reload }:
     <BusinessDateFilter value={filter} onChange={setFilter} showProductFilter products={state.products} />
     <div className="dashboard-meta"><span><Clock3 size={15} /> Last updated {clock.formatTime(new Date(state.lastUpdatedAt), false)}</span><span><Wifi size={15} /> {state.settings.realtimeEnabled ? "Live refresh enabled" : "Live refresh off"}</span></div>
     <section className="metrics">{metrics.map(({ label, value, icon: Icon, featured }) => <article className={`metric${featured ? " featured" : ""}`} key={label}><Icon className="metric-icon" size={21} /><span>{label}</span><strong>{value}</strong></article>)}</section>
-    <div className="section-head"><div><h2>Daily Stock</h2><p>Stock resets only when a new day is manually started.</p></div></div>
+    <div className="section-head"><div><h2>{ml.messages.dailyStock}</h2><p>{ml.messages.stockResetsOnlyWhenNewDayStarted}</p></div></div>
     <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><div><h3>{item.productName}</h3><p>Picked {item.pickedQuantity}</p></div><span className="badge">{item.remainingQuantity} remaining</span></div><div className="stock-strip"><span>Picked <strong>{item.pickedQuantity}</strong></span><span>Sold <strong>{item.soldQuantity}</strong></span><span>Remaining <strong>{item.remainingQuantity}</strong></span></div></article>) ?? <Empty icon={Boxes} text="Start a business day to prepare daily stock." />}</div>
-    <div className="section-head"><div><h2>Persistent Commission Progress</h2><p>Day Start and Day Close never reset these cycles.</p></div></div>
+    <div className="section-head"><div><h2>{ml.labels.persistentCommissionProgress}</h2><p>{ml.messages.dayStartAndCloseNeverReset}</p></div></div>
     <div className="list">{state.products.map((product) => <article className="list-card" key={product.id}><div className="list-row"><div><h3>{product.name}</h3><p>Cycle {product.cycleNumber}</p></div><span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress} / {product.rewardThreshold}</span></div><div className="progress-track" style={{ marginTop: ".75rem" }}><div className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></div></article>)}</div>
   </>;
 }
@@ -1109,7 +1255,7 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
       <PageTitle title="Offers" navigate={navigate} />
       <BusinessDateFilter value={filter} onChange={handleFilterChange} showStatusFilter showProductFilter products={state.products} />
       <section className="hero">
-        <p className="hero-label">Filtered Offers Earned</p>
+        <p className="hero-label">{ml.labels.filteredOffersEarned}</p>
         <h2 className="hero-value">{money(totalRewardsAmount)}</h2>
         <p className="hero-foot">
           <Trophy size={17} /> {state.rewards.length} earned Offer record{state.rewards.length === 1 ? "" : "s"}
@@ -1118,8 +1264,8 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
 
       <div className="section-head">
         <div>
-          <h2>Offer Records</h2>
-          <p>Tap an EARNED offer to mark as received.</p>
+          <h2>{ml.labels.offerRecords}</h2>
+          <p>{ml.messages.tapEarnedOfferToMarkReceived}</p>
         </div>
       </div>
 
@@ -1162,7 +1308,7 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
                       )}
                       {isEarned && (
                         <span style={{ fontSize: "0.75rem", color: "var(--primary-color)", fontWeight: 500 }}>
-                          Tap to mark as received
+                          {ml.messages.tapToMarkReceived}
                         </span>
                       )}
                     </div>
@@ -1230,9 +1376,9 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
       <AlertDialog open={confirmMode === "receive"} onOpenChange={(open) => !open && setConfirmMode(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Mark this Offer as Received?</AlertDialogTitle>
+            <AlertDialogTitle>{ml.messages.markOfferAsReceived}</AlertDialogTitle>
             <AlertDialogDescription>
-              Confirm that you have actually received this Offer. This will change the Offer status from EARNED to RECEIVED.
+              {ml.messages.confirmActuallyReceivedOffer}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {selectedReward && (
@@ -1244,7 +1390,7 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting}>{ml.actions.cancel}</AlertDialogCancel>
             <AlertDialogAction
               disabled={submitting}
               onClick={(event) => {
@@ -1262,9 +1408,9 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
       <AlertDialog open={confirmMode === "undo"} onOpenChange={(open) => !open && setConfirmMode(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Undo Received Status?</AlertDialogTitle>
+            <AlertDialogTitle>{ml.messages.undoReceivedStatus}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will change the Offer back from RECEIVED to EARNED.
+              {ml.messages.changeOfferBackToEarned}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {selectedReward && (
@@ -1275,7 +1421,7 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
             </div>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={submitting}>{ml.actions.cancel}</AlertDialogCancel>
             <button
               className="danger-button"
               disabled={submitting}
@@ -1363,7 +1509,7 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
         <>
           <div className="section-head">
             <div>
-              <h2>Sales History</h2>
+              <h2>{ml.labels.salesHistory}</h2>
               <p>{salesCount} preserved transaction record{salesCount === 1 ? "" : "s"}</p>
             </div>
           </div>
@@ -1407,7 +1553,7 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
         <>
           <div className="section-head">
             <div>
-              <h2>Closed Business Days</h2>
+              <h2>{ml.labels.closedBusinessDays}</h2>
               <p>{closuresCount} confirmed business day closure{closuresCount === 1 ? "" : "s"}</p>
             </div>
           </div>
@@ -1423,10 +1569,10 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
                   >
                     <div className="list-row">
                       <div>
-                        <h3>Business Date: {c.businessDate}</h3>
+                        <h3>{ml.labels.businessDate}: {c.businessDate}</h3>
                         <p>Closed at {formatTimestamp(c.createdAt)} · Version {c.closureVersion}</p>
                       </div>
-                      <span className="badge ready">CLOSED</span>
+                      <span className="badge ready">{ml.status.closedCaps}</span>
                     </div>
                     {c.reportText && (
                       <p style={{ margin: "0.5rem 0 0", color: "var(--muted)", fontSize: "0.85rem", whiteSpace: "pre-line" }}>
@@ -1434,7 +1580,7 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
                       </p>
                     )}
                     <span style={{ fontSize: "0.75rem", color: "var(--primary-color)", fontWeight: 500, marginTop: "0.5rem", display: "inline-block" }}>
-                      Tap to view full closure summary
+                      {ml.messages.tapToViewFullClosureSummary}
                     </span>
                   </article>
                 ))}
@@ -1456,7 +1602,7 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
           <AlertDialog open={!!selectedClosure} onOpenChange={(open) => !open && setSelectedClosure(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Business Day Closure Summary</AlertDialogTitle>
+                <AlertDialogTitle>{ml.labels.businessDayClosureSummary}</AlertDialogTitle>
                 <AlertDialogDescription>
                   Date: {selectedClosure?.businessDate} · Closed at {selectedClosure?.createdAt ? formatTimestamp(selectedClosure.createdAt) : ""}
                 </AlertDialogDescription>
@@ -1507,13 +1653,14 @@ function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, sh
     showToast({ message: "Report copied." });
   }
   return <><PageTitle title="Day Close" navigate={navigate} /><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
+    {state.daySession?.status === "CLOSED" && <div className="highlight-red-bg" style={{ textAlign: "center", marginBottom: "1rem", padding: "0.75rem", borderRadius: "8px", fontSize: "1.1rem", textTransform: "uppercase", letterSpacing: "1px" }}>{ml.status.businessDayClosed}</div>}
     {state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" && <PreviousDayWarning state={state} navigate={navigate} money={money} formatTime={(date) => clock.formatTime(date, false)} />}
-    <section className="session-timing"><div><span>Business Date</span><strong>{state.daySession?.businessDate ?? "Not started"}</strong></div><div><span>Started</span><strong>{startedAt ? clock.formatTime(startedAt, false) : "—"}</strong></div><div><span>Current Time</span><strong>{clock.formatTime(trustedTime, false)}</strong></div><div><span>Closed</span><strong>{confirmedCloseTime ? clock.formatTime(new Date(confirmedCloseTime), false) : "Not closed"}</strong></div><div><span>Working Duration</span><strong>{startedAt ? formatWorkingDuration(startedAt, durationEnd) : "—"}</strong></div></section>
+    <section className="session-timing"><div><span>{ml.labels.businessDate}</span><strong>{state.daySession?.businessDate ?? "Not started"}</strong></div><div><span>{ml.labels.started}</span><strong>{startedAt ? clock.formatTime(startedAt, false) : "—"}</strong></div><div><span>{ml.labels.currentTime}</span><strong>{clock.formatTime(trustedTime, false)}</strong></div><div><span>Closed</span><strong>{confirmedCloseTime ? clock.formatTime(new Date(confirmedCloseTime), false) : "Not closed"}</strong></div><div><span>{ml.labels.workingDuration}</span><strong>{startedAt ? formatWorkingDuration(startedAt, durationEnd) : "—"}</strong></div></section>
     <div className="section-head"><div><h2>Product-wise stock review</h2><p>Review every picked, sold, and remaining quantity.</p></div></div>
     <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><h3>{item.productName}</h3><span className="badge">{item.remainingQuantity} remaining</span></div><div className="stock-strip"><span>Picked <strong>{item.pickedQuantity}</strong></span><span>Sold <strong>{item.soldQuantity}</strong></span><span>Remaining <strong>{item.remainingQuantity}</strong></span></div></article>)}</div>
     <section className="close-summary">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-        <h2 style={{ margin: 0 }}>Session summary</h2>
+        <h2 style={{ margin: 0 }}>{ml.labels.sessionSummary}</h2>
         {state.daySession?.status === "OPEN" && (
           <button
             className="secondary-button"
@@ -1528,7 +1675,7 @@ function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, sh
       <div className="review-row"><span>Gross Sales</span><strong>{money(state.dashboard.grossSalesPaise)}</strong></div>
       <div className="review-row"><span>Normal Commission</span><strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></div>
       <div className="review-row"><span>Offers Earned</span><strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></div>
-      <div className="review-row"><span>Salesperson Earnings</span><strong>{money(state.dashboard.totalEarningsPaise)}</strong></div>
+      <div className="review-row"><span>{ml.finance.salespersonEarnings}</span><strong>{money(state.dashboard.totalEarningsPaise)}</strong></div>
       <div className="review-row" style={{ background: "rgba(245, 158, 11, 0.08)", padding: "0.4rem 0.6rem", borderRadius: "6px", margin: "0.2rem 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span>Daily Expenses</span>
@@ -1543,18 +1690,18 @@ function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, sh
         </div>
         <strong>{money(state.dashboard.totalExpensesPaise)}</strong>
       </div>
-      <div className="review-row"><span>Company Payable</span><strong>{money(state.dashboard.netCollectionPaise)}</strong></div>
+      <div className="review-row"><span>{ml.finance.companyPayable}</span><strong>{money(state.dashboard.netCollectionPaise)}</strong></div>
     </section>
-    {report ? <><pre className="list-card report-text">{report}</pre><button className="secondary-button full-width" onClick={() => void copyReport()}>Copy Message</button></> :
+    {report ? <><pre className="list-card report-text">{report}</pre><button className="secondary-button full-width" onClick={() => void copyReport()}>{ml.messages.copyMessage}</button></> :
       <button className="primary-button full-width" disabled={closing || state.daySession?.status !== "OPEN" || !clock.synchronized} onClick={() => setConfirmOpen(true)}><CalendarCheck size={20} />{state.daySession?.status === "CLOSED" ? "Day Already Closed" : !clock.synchronized ? "Waiting for trusted time" : "CONTINUE TO DAY CLOSE"}</button>}
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" ? "Close Previous Business Day?" : "Close Current Business Day?"}</AlertDialogTitle>
-          <AlertDialogDescription>Review the previous day&apos;s stock and financial details before closing it. After closing, no additional sales can be added unless the day is formally reopened.</AlertDialogDescription>
+          <AlertDialogDescription>{ml.messages.reviewPreviousDayBeforeClosing}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="dialog-summary">
-          <span>Business Date <strong>{state.daySession?.businessDate}</strong></span>
+          <span>{ml.labels.businessDate} <strong>{state.daySession?.businessDate}</strong></span>
           <span>Total Units Sold <strong>{state.dashboard.totalUnits}</strong></span>
           <span>Salesperson Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span>
           <span>Daily Expenses <strong>{money(state.dashboard.totalExpensesPaise)}</strong></span>
@@ -1608,11 +1755,11 @@ function SettingsScreen({ state, settings, navigate, reload, showToast }: { stat
   }
 
   return <><PageTitle title="Settings & More" navigate={navigate} /><section className="settings-card">
-    <div className="field"><label htmlFor="salesman">Salesman name</label><input id="salesman" value={form.salesmanName} onChange={(event) => setForm({ ...form, salesmanName: event.target.value })} /></div>
-    <div className="field"><label htmlFor="business">Business name</label><input id="business" value={form.businessName} onChange={(event) => setForm({ ...form, businessName: event.target.value })} /></div>
-    <div className="field"><label htmlFor="whatsapp">WhatsApp report number</label><input id="whatsapp" inputMode="tel" placeholder="Country code and number" value={form.whatsappNumber} onChange={(event) => setForm({ ...form, whatsappNumber: event.target.value })} /></div>
-    <div className="field"><label>Business timezone</label><input value={form.timezone} disabled /></div>
-    <div className="switch-row"><div><strong>Live refresh</strong><p className="eyebrow" style={{ marginTop: ".2rem" }}>Keep totals up to date</p></div><button className={`switch${form.realtimeEnabled ? " on" : ""}`} role="switch" aria-checked={form.realtimeEnabled} onClick={() => setForm({ ...form, realtimeEnabled: !form.realtimeEnabled })}><span /></button></div>
+    <div className="field"><label htmlFor="salesman">{ml.labels.salesmanName}</label><input id="salesman" value={form.salesmanName} onChange={(event) => setForm({ ...form, salesmanName: event.target.value })} /></div>
+    <div className="field"><label htmlFor="business">{ml.labels.businessName}</label><input id="business" value={form.businessName} onChange={(event) => setForm({ ...form, businessName: event.target.value })} /></div>
+    <div className="field"><label htmlFor="whatsapp">{ml.labels.whatsappReportNumber}</label><input id="whatsapp" inputMode="tel" placeholder="Country code and number" value={form.whatsappNumber} onChange={(event) => setForm({ ...form, whatsappNumber: event.target.value })} /></div>
+    <div className="field"><label>{ml.labels.businessTimezone}</label><input value={form.timezone} disabled /></div>
+    <div className="switch-row"><div><strong>{ml.labels.liveRefresh}</strong><p className="eyebrow" style={{ marginTop: ".2rem" }}>{ml.labels.keepTotalsUpToDate}</p></div><button className={`switch${form.realtimeEnabled ? " on" : ""}`} role="switch" aria-checked={form.realtimeEnabled} onClick={() => setForm({ ...form, realtimeEnabled: !form.realtimeEnabled })}><span /></button></div>
     <button className="primary-button full-width" disabled={saving} onClick={() => void save()}><Save size={19} />{saving ? "Saving…" : "Save Settings"}</button>
     <div style={{ marginTop: "2rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <button className="secondary-button full-width" onClick={() => navigate("historical-entry")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
@@ -1634,7 +1781,7 @@ function SettingsScreen({ state, settings, navigate, reload, showToast }: { stat
     <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Reset Active Business Day?</AlertDialogTitle>
+          <AlertDialogTitle>{ml.messages.resetActiveBusinessDayQ}</AlertDialogTitle>
           <AlertDialogDescription>
             This will permanently remove all sales, offers, expenses, and picked-product entries linked to this active day ({state.daySession?.businessDate}). This day will not be counted as a completed business day. All data from previous days will remain unchanged.
           </AlertDialogDescription>
@@ -1711,12 +1858,12 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
     <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Cancel Historical Draft?</AlertDialogTitle>
-          <AlertDialogDescription>All unsaved draft data will be discarded. Confirmed historical records already saved to the database will not be affected.</AlertDialogDescription>
+          <AlertDialogTitle>{ml.messages.cancelHistoricalDraft}</AlertDialogTitle>
+          <AlertDialogDescription>{ml.messages.allUnsavedDraftDataDiscarded}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>KEEP EDITING</AlertDialogCancel>
-          <AlertDialogAction onClick={cancelDraft}>DISCARD DRAFT</AlertDialogAction>
+          <AlertDialogCancel>{ml.actions.keepEditing}</AlertDialogCancel>
+          <AlertDialogAction onClick={cancelDraft}>{ml.actions.discardDraft}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -1726,7 +1873,7 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
     return <><PageTitle title="Previous Business Data" navigate={() => navigate("settings")} />
       {CancelDraftDialog}
       <section className="settings-card">
-        <p className="eyebrow" style={{ marginBottom: "1rem" }}>SELECT PAST BUSINESS DATE</p>
+        <p className="eyebrow" style={{ marginBottom: "1rem" }}>{ml.actions.selectPastBusinessDate}</p>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "1.5rem" }}>
           <Calendar
             selectedDate={date}
@@ -1739,8 +1886,8 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
             Selected Date: {date}
           </p>
         )}
-        <button className="primary-button full-width" disabled={!date} onClick={() => setStep("pickup")}>Next: Stock Pickup</button>
-        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>CANCEL DRAFT</button>
+        <button className="primary-button full-width" disabled={!date} onClick={() => setStep("pickup")}>{ml.labels.nextStockPickup}</button>
+        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>{ml.actions.cancelDraft}</button>
       </section>
     </>;
   }
@@ -1756,8 +1903,8 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
             <input type="number" min="0" value={pickup[p.id] || ""} onChange={e => setPickup({ ...pickup, [p.id]: parseInt(e.target.value) || 0 })} />
           </div>
         ))}
-        <button className="primary-button full-width" onClick={() => setStep("sales")}>Next: Sales</button>
-        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>CANCEL DRAFT</button>
+        <button className="primary-button full-width" onClick={() => setStep("sales")}>{ml.labels.nextSales}</button>
+        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>{ml.actions.cancelDraft}</button>
       </section>
     </>;
   }
@@ -1775,8 +1922,8 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
             <input type="number" min="0" max={picked} value={sales[p.id] || ""} onChange={e => setSales({ ...sales, [p.id]: parseInt(e.target.value) || 0 })} />
           </div>;
         })}
-        <button className="primary-button full-width" onClick={() => setStep("review")}>Next: Review</button>
-        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>CANCEL DRAFT</button>
+        <button className="primary-button full-width" onClick={() => setStep("review")}>{ml.labels.nextReview}</button>
+        <button className="secondary-button full-width" style={{ marginTop: "0.75rem" }} onClick={requestCancel}>{ml.actions.cancelDraft}</button>
       </section>
     </>;
   }
@@ -1800,7 +1947,7 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
         <button className="primary-button full-width" disabled={submitting} onClick={() => void submit()}>
           {submitting ? "SAVING..." : "CONFIRM AND SAVE"}
         </button>
-        <button className="secondary-button full-width" disabled={submitting} onClick={requestCancel}>CANCEL DRAFT</button>
+        <button className="secondary-button full-width" disabled={submitting} onClick={requestCancel}>{ml.actions.cancelDraft}</button>
       </div>
     </section>
   </>;
