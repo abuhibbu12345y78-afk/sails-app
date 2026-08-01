@@ -971,9 +971,10 @@ function SaleScreen({ state, money, navigate, openSale, dateChanged }: { state: 
 
 function DashboardScreen({ state, clock, trustedTime, money, navigate, reload }: TimeProps & { money: (value: number) => string; navigate: (screen: Screen) => void; reload: (silentOrFilter?: boolean | DateFilterOptions) => Promise<void> }) {
   const [filter, setFilter] = useState<DateFilterValue>({ preset: "all" });
+  const lastRequestRef = useRef<string>("");
 
-  const buildFilterOpts = useCallback((f: DateFilterValue): DateFilterOptions | undefined => {
-    if (f.preset === "all" && !f.productId) return undefined;
+  const buildFilterOpts = useCallback((f: DateFilterValue): DateFilterOptions => {
+    if (f.preset === "all" && !f.productId) return {};
     const { startDate, endDate } = computeEffectiveDateRange(f, state.time.businessDate);
     const opts: DateFilterOptions = {};
     if (startDate) opts.startDate = startDate;
@@ -983,7 +984,11 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate, reload }:
   }, [state.time.businessDate]);
 
   useEffect(() => {
-    void reload(buildFilterOpts(filter));
+    const opts = buildFilterOpts(filter);
+    const key = JSON.stringify(opts);
+    if (key === lastRequestRef.current) return;
+    lastRequestRef.current = key;
+    void reload(opts);
   }, [filter, reload, buildFilterOpts]);
 
   const showingToday = filter.preset === "all" && !filter.productId;
@@ -1032,6 +1037,7 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
   const [filter, setFilter] = useState<DateFilterValue>({ preset: "all" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const lastRequestRef = useRef<string>("");
 
   const buildFilterOpts = useCallback((f: DateFilterValue, p: number, ps: number): DateFilterOptions => {
     const opts: DateFilterOptions = { page: p, pageSize: ps };
@@ -1051,7 +1057,11 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
   }, []);
 
   useEffect(() => {
-    void reload(buildFilterOpts(filter, page, pageSize));
+    const opts = buildFilterOpts(filter, page, pageSize);
+    const key = JSON.stringify(opts);
+    if (key === lastRequestRef.current) return;
+    lastRequestRef.current = key;
+    void reload(opts);
   }, [filter, page, pageSize, reload, buildFilterOpts]);
 
   const totalRewardsAmount = state.rewards.reduce((sum, reward) => sum + reward.amountPaise, 0);
@@ -1296,6 +1306,7 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
   const [filter, setFilter] = useState<DateFilterValue>({ preset: "all" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const lastRequestRef = useRef<string>("");
 
   const buildFilterOpts = useCallback((f: DateFilterValue, p: number, ps: number): DateFilterOptions => {
     const opts: DateFilterOptions = { page: p, pageSize: ps };
@@ -1304,6 +1315,7 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
       if (startDate) opts.startDate = startDate;
       if (endDate) opts.endDate = endDate;
     }
+    if (f.status && f.status !== "ALL") opts.status = f.status;
     if (f.productId) opts.productId = f.productId;
     return opts;
   }, [state.time.businessDate]);
@@ -1314,7 +1326,11 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
   }, []);
 
   useEffect(() => {
-    void reload(buildFilterOpts(filter, page, pageSize));
+    const opts = buildFilterOpts(filter, page, pageSize);
+    const key = JSON.stringify(opts);
+    if (key === lastRequestRef.current) return;
+    lastRequestRef.current = key;
+    void reload(opts);
   }, [filter, page, pageSize, reload, buildFilterOpts]);
 
   const salesCount = state.historySalesCount ?? state.historySales.length;
