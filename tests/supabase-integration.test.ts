@@ -1,4 +1,4 @@
-import test, { describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { SupabaseStateRepository, SupabaseSettingsRepository } from '../src/infrastructure/supabase/repositories.ts';
 

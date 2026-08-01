@@ -1,4 +1,4 @@
-import type { AppSettings, DaySession, DayStockItem, TrackerState, TrustedTimeState, DayExpense } from "./contracts";
+import type { AppSettings, TrackerState, TrustedTimeState, DayExpense } from "./contracts";
 import type { CommissionCalculationResult } from "../domain/commission";
 
 export interface StartDayInput {

@@ -335,11 +335,6 @@ export class D1DaySessionRepository implements DaySessionRepository {
     const session = await db.prepare("SELECT * FROM day_sessions WHERE id = ?").bind(sessionId).first<Row>();
     if (!session) throw new DomainError("The Business Day could not be found.", 404);
 
-    const [later, countRow] = await Promise.all([
-      db.prepare("SELECT id FROM day_sessions WHERE business_date > ? LIMIT 1").bind(session.business_date).first<Row>(),
-      db.prepare("SELECT COUNT(*) as count FROM day_session_sales WHERE day_session_id = ?").bind(sessionId).first<Row>(),
-    ]);
-    
     // We can allow reset if no sales are made. If there are sales, we delete them too? 
     // The user requested a complete wipe. We should delete everything cascadingly.
     // In SQLite/D1 we'll delete explicitly if no ON DELETE CASCADE is set.
@@ -481,7 +476,7 @@ export class D1SettingsRepository implements SettingsRepository {
 }
 
 export class D1StateRepository implements StateRepository {
-  async getTrackerState(filter?: DateFilterOptions): Promise<TrackerState> {
+  async getTrackerState(_filter?: DateFilterOptions): Promise<TrackerState> {
     const db = await ensureDatabase();
     const settingsRow = await db.prepare("SELECT * FROM settings WHERE id = 'default'").first<Row>();
     const settings: AppSettings = {
@@ -641,7 +636,10 @@ export class D1StateRepository implements StateRepository {
         })
         : { allowed: false, reason: "No closed Business Day is available." },
       historySales,
+      historySalesCount: historySales.length,
       historyClosures,
+      historyClosuresCount: historyClosures.length,
+      rewardsCount: (rewards ?? []).length,
       expenses: [],
       lastUpdatedAt: time.serverTimeIso,
     };

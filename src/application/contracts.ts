@@ -112,6 +112,7 @@ export interface DateFilterOptions {
 export interface TrackerState {
   products: Product[];
   dashboard: DashboardSummary;
+  filteredDashboard?: DashboardSummary;
   sales: SaleRecord[];
   rewards: FullCommissionReward[];
   settings: AppSettings;
@@ -124,7 +125,10 @@ export interface TrackerState {
   reopenEligibility: ReopenEligibility;
   resetEligibility: ReopenEligibility;
   historySales: SaleRecord[];
+  historySalesCount: number;
   historyClosures: DayCloseSnapshot[];
+  historyClosuresCount: number;
+  rewardsCount: number;
   expenses: DayExpense[];
   lastUpdatedAt: string;
 }

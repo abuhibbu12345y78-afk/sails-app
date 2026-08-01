@@ -1,5 +1,4 @@
 import { SupabaseStateRepository, SupabaseDaySessionRepository, SupabaseSaleRepository } from '../src/infrastructure/supabase/repositories';
-import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 
 const env = fs.readFileSync('.env.local', 'utf8');

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Calendar as CalendarIcon, Filter, X, Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import React, { useState } from "react";
+import { Calendar as CalendarIcon, Filter, X, Check, ChevronDown } from "lucide-react";
 import { Calendar } from "./ui/calendar";
 
 export type DateFilterPreset =
@@ -110,10 +110,12 @@ export function BusinessDateFilter({
 }: BusinessDateFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState<DateFilterValue>(value);
+  const [prevValue, setPrevValue] = useState<DateFilterValue>(value);
 
-  useEffect(() => {
+  if (prevValue !== value) {
+    setPrevValue(value);
     setDraft(value);
-  }, [value]);
+  }
 
   const activeRange = computeEffectiveDateRange(value, new Date().toISOString().split("T")[0]);
 

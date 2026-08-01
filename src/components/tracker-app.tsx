@@ -7,8 +7,8 @@ import {
   ShoppingBag, Sparkles, Trophy, WalletCards, Wifi, X,
 } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AppSettings, DayCloseSnapshot, FullCommissionReward, SaleRecord, TrackerState } from "../application/contracts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { AppSettings, DateFilterOptions, DayCloseSnapshot, FullCommissionReward, TrackerState } from "../application/contracts";
 import { BusinessDateFilter, type DateFilterValue, computeEffectiveDateRange } from "./business-date-filter";
 import { Calendar } from "./ui/calendar";
 import { Pagination } from "./ui/pagination";
@@ -63,19 +63,14 @@ function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps 
   const foodExpense = expenses.find((e) => e.category === "Food");
   const otherExpenses = expenses.filter((e) => e.category === "Other");
 
-  const [petrolRupees, setPetrolRupees] = useState(petrolExpense ? String(petrolExpense.amountPaise / 100) : "");
-  const [foodRupees, setFoodRupees] = useState(foodExpense ? String(foodExpense.amountPaise / 100) : "");
+  const [petrolDraft, setPetrolDraft] = useState<string | null>(null);
+  const [foodDraft, setFoodDraft] = useState<string | null>(null);
+  const petrolRupees = petrolDraft ?? (petrolExpense ? String(petrolExpense.amountPaise / 100) : "");
+  const foodRupees = foodDraft ?? (foodExpense ? String(foodExpense.amountPaise / 100) : "");
 
   const [otherDescription, setOtherDescription] = useState("");
   const [otherRupees, setOtherRupees] = useState("");
   const [savingCategory, setSavingCategory] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (petrolExpense) setPetrolRupees(String(petrolExpense.amountPaise / 100));
-    else setPetrolRupees("");
-    if (foodExpense) setFoodRupees(String(foodExpense.amountPaise / 100));
-    else setFoodRupees("");
-  }, [expenses]);
 
   const totalOtherPaise = otherExpenses.reduce((sum, e) => sum + e.amountPaise, 0);
   const totalExpensesPaise = state.dashboard.totalExpensesPaise || expenses.reduce((sum, e) => sum + e.amountPaise, 0);
@@ -93,16 +88,18 @@ function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps 
             method: "POST",
             body: JSON.stringify({ action: "delete", expenseId: existing.id }),
           });
-          await reload(true);
-          showToast({ message: `${category} expense removed.` });
-        } catch (err) {
-          showToast({ message: err instanceof Error ? err.message : "Failed to delete expense", error: true });
-        } finally {
-          setSavingCategory(null);
-        }
-      }
-      return;
+      await reload(true);
+      if (category === "Petrol") setPetrolDraft(null);
+      else setFoodDraft(null);
+      showToast({ message: `${category} expense removed.` });
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to delete expense", error: true });
+    } finally {
+      setSavingCategory(null);
     }
+  }
+  return;
+}
 
     const amountPaise = Math.round(amountRupees * 100);
     setSavingCategory(category);
@@ -120,6 +117,8 @@ function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps 
         });
       }
       await reload(true);
+      if (category === "Petrol") setPetrolDraft(null);
+      else setFoodDraft(null);
       showToast({ message: `${category} expense saved.` });
     } catch (err) {
       showToast({ message: err instanceof Error ? err.message : "Failed to save expense", error: true });
@@ -208,7 +207,7 @@ function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps 
                   step="any"
                   placeholder="0.00"
                   value={petrolRupees}
-                  onChange={(e) => setPetrolRupees(e.target.value)}
+                  onChange={(e) => setPetrolDraft(e.target.value)}
                 />
                 <button
                   className="secondary-button"
@@ -230,7 +229,7 @@ function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps 
                   step="any"
                   placeholder="0.00"
                   value={foodRupees}
-                  onChange={(e) => setFoodRupees(e.target.value)}
+                  onChange={(e) => setFoodDraft(e.target.value)}
                 />
                 <button
                   className="secondary-button"
@@ -339,11 +338,25 @@ export function TrackerApp() {
   const locale = state?.settings.locale ?? "en-IN";
   const clock = useTrustedClock(timezone, locale);
 
-  const load = useCallback(async (silent = false) => {
+  const activeFilterRef = useRef<DateFilterOptions | undefined>(undefined);
+
+  const load = useCallback(async (silentOrFilter: boolean | DateFilterOptions = false) => {
+    const silent = typeof silentOrFilter === "boolean" ? silentOrFilter : true;
+    const filterOpts = typeof silentOrFilter === "object" ? silentOrFilter : activeFilterRef.current;
+    if (typeof silentOrFilter === "object") activeFilterRef.current = silentOrFilter;
     if (!silent) setLoading(true);
     try {
-      const search = typeof window !== "undefined" ? window.location.search : "";
-      setState(await api<TrackerState>(`/api/state${search}`));
+      const params = new URLSearchParams();
+      if (filterOpts) {
+        if (filterOpts.startDate) params.set("startDate", filterOpts.startDate);
+        if (filterOpts.endDate) params.set("endDate", filterOpts.endDate);
+        if (filterOpts.status && filterOpts.status !== "ALL") params.set("status", filterOpts.status);
+        if (filterOpts.productId) params.set("productId", filterOpts.productId);
+        if (filterOpts.page) params.set("page", String(filterOpts.page));
+        if (filterOpts.pageSize) params.set("pageSize", String(filterOpts.pageSize));
+      }
+      const qs = params.toString();
+      setState(await api<TrackerState>(`/api/state${qs ? `?${qs}` : ""}`));
       setError("");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "The tracker is unavailable.");
@@ -452,9 +465,9 @@ export function TrackerApp() {
         {screen === "start-day" && <StartDayScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "additional-pickup" && <AdditionalPickupScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "sale" && <SaleScreen state={state} money={money} navigate={navigate} openSale={openSale} dateChanged={dateChanged} />}
-        {screen === "dashboard" && <DashboardScreen {...timeProps} state={state} money={money} navigate={navigate} />}
+        {screen === "dashboard" && <DashboardScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} />}
         {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} reload={load} showToast={setToast} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
-        {screen === "history" && <HistoryScreen sales={state.historySales} closures={state.historyClosures || []} money={money} navigate={navigate} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
+        {screen === "history" && <HistoryScreen state={state} money={money} navigate={navigate} reload={load} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
         {screen === "day-close" && <DayCloseScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "settings" && <SettingsScreen state={state} settings={state.settings} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "historical-entry" && <HistoricalEntryScreen state={state} navigate={navigate} reload={load} showToast={setToast} />}
@@ -956,35 +969,42 @@ function SaleScreen({ state, money, navigate, openSale, dateChanged }: { state: 
     })}</div></>;
 }
 
-function DashboardScreen({ state, clock, trustedTime, money, navigate }: TimeProps & { money: (value: number) => string; navigate: (screen: Screen) => void }) {
+function DashboardScreen({ state, clock, trustedTime, money, navigate, reload }: TimeProps & { money: (value: number) => string; navigate: (screen: Screen) => void; reload: (silentOrFilter?: boolean | DateFilterOptions) => Promise<void> }) {
   const [filter, setFilter] = useState<DateFilterValue>({ preset: "all" });
 
-  const filteredSales = useMemo(() => {
-    if (filter.preset === "all") return state.historySales.length > 0 ? state.historySales : state.sales;
-    const { startDate, endDate } = computeEffectiveDateRange(filter, state.time.businessDate);
-    return state.historySales.filter((s) => {
-      const bDate = s.businessDate || s.createdAt.split("T")[0];
-      if (startDate && bDate < startDate) return false;
-      if (endDate && bDate > endDate) return false;
-      return true;
-    });
-  }, [state.historySales, state.sales, state.time.businessDate, filter]);
+  const buildFilterOpts = useCallback((f: DateFilterValue): DateFilterOptions | undefined => {
+    if (f.preset === "all" && !f.productId) return undefined;
+    const { startDate, endDate } = computeEffectiveDateRange(f, state.time.businessDate);
+    const opts: DateFilterOptions = {};
+    if (startDate) opts.startDate = startDate;
+    if (endDate) opts.endDate = endDate;
+    if (f.productId) opts.productId = f.productId;
+    return opts;
+  }, [state.time.businessDate]);
 
-  const totalUnits = filteredSales.reduce((sum, s) => sum + s.quantity, 0);
-  const grossSalesPaise = filteredSales.reduce((sum, s) => sum + s.grossSalesPaise, 0);
-  const totalNormalCommissionPaise = filteredSales.reduce((sum, s) => sum + s.totalNormalCommissionPaise, 0);
-  const totalFullCommissionPaise = filteredSales.reduce((sum, s) => sum + s.totalFullCommissionPaise, 0);
-  const totalEarningsPaise = totalNormalCommissionPaise + totalFullCommissionPaise;
-  const netCollectionPaise = grossSalesPaise - totalEarningsPaise;
+  useEffect(() => {
+    void reload(buildFilterOpts(filter));
+  }, [filter, reload, buildFilterOpts]);
 
+  const showingToday = filter.preset === "all" && !filter.productId;
+  const filteredMetricsFallback = {
+    totalUnits: state.historySales.reduce((s, r) => s + r.quantity, 0),
+    grossSalesPaise: state.historySales.reduce((s, r) => s + r.grossSalesPaise, 0),
+    totalNormalCommissionPaise: state.historySales.reduce((s, r) => s + r.totalNormalCommissionPaise, 0),
+    totalFullCommissionPaise: state.historySales.reduce((s, r) => s + r.totalFullCommissionPaise, 0),
+    totalEarningsPaise: state.historySales.reduce((s, r) => s + r.totalNormalCommissionPaise + r.totalFullCommissionPaise, 0),
+    totalExpensesPaise: 0,
+    netCollectionPaise: state.historySales.reduce((s, r) => s + r.grossSalesPaise, 0) - state.historySales.reduce((s, r) => s + r.totalNormalCommissionPaise + r.totalFullCommissionPaise, 0),
+  };
+  const d = showingToday ? state.dashboard : (state.filteredDashboard ?? filteredMetricsFallback);
   const metrics = [
-    { label: "Units Sold", value: String(filter.preset === "all" ? state.dashboard.totalUnits : totalUnits), icon: ShoppingBag },
-    { label: "Gross Sales", value: money(filter.preset === "all" ? state.dashboard.grossSalesPaise : grossSalesPaise), icon: ReceiptIndianRupee },
-    { label: "Normal Commission", value: money(filter.preset === "all" ? state.dashboard.totalNormalCommissionPaise : totalNormalCommissionPaise), icon: WalletCards },
-    { label: "Offers Earned", value: money(filter.preset === "all" ? state.dashboard.totalFullCommissionPaise : totalFullCommissionPaise), icon: Trophy },
-    { label: "Salesperson Earnings", value: money(filter.preset === "all" ? state.dashboard.totalEarningsPaise : totalEarningsPaise), icon: IndianRupee, featured: true },
-    { label: "Daily Expenses", value: money(filter.preset === "all" ? state.dashboard.totalExpensesPaise : 0), icon: WalletCards },
-    { label: "Company Payable", value: money(filter.preset === "all" ? state.dashboard.netCollectionPaise : (grossSalesPaise - totalEarningsPaise)), icon: Package },
+    { label: "Units Sold", value: String(d.totalUnits), icon: ShoppingBag },
+    { label: "Gross Sales", value: money(d.grossSalesPaise), icon: ReceiptIndianRupee },
+    { label: "Normal Commission", value: money(d.totalNormalCommissionPaise), icon: WalletCards },
+    { label: "Offers Earned", value: money(d.totalFullCommissionPaise), icon: Trophy },
+    { label: "Salesperson Earnings", value: money(d.totalEarningsPaise), icon: IndianRupee, featured: true },
+    { label: "Daily Expenses", value: money(d.totalExpensesPaise), icon: WalletCards },
+    { label: "Company Payable", value: money(d.netCollectionPaise), icon: Package },
   ];
   return <><PageTitle title="Dashboard" navigate={navigate} /><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
     <BusinessDateFilter value={filter} onChange={setFilter} showProductFilter products={state.products} />
@@ -1001,7 +1021,7 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
   state: TrackerState;
   money: (value: number) => string;
   navigate: (screen: Screen) => void;
-  reload: (silent?: boolean) => Promise<void>;
+  reload: (silentOrFilter?: boolean | DateFilterOptions) => Promise<void>;
   showToast: (toast: ToastState) => void;
   formatTimestamp: (value: string) => string;
 }) {
@@ -1013,30 +1033,28 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
+  const buildFilterOpts = useCallback((f: DateFilterValue, p: number, ps: number): DateFilterOptions => {
+    const opts: DateFilterOptions = { page: p, pageSize: ps };
+    if (f.preset !== "all") {
+      const { startDate, endDate } = computeEffectiveDateRange(f, state.time.businessDate);
+      if (startDate) opts.startDate = startDate;
+      if (endDate) opts.endDate = endDate;
+    }
+    if (f.status && f.status !== "ALL") opts.status = f.status;
+    if (f.productId) opts.productId = f.productId;
+    return opts;
+  }, [state.time.businessDate]);
+
+  const handleFilterChange = useCallback((newFilter: DateFilterValue) => {
+    setFilter(newFilter);
     setPage(1);
-  }, [filter]);
+  }, []);
 
-  const filteredRewards = useMemo(() => {
-    return state.rewards.filter((r) => {
-      if (filter.status && filter.status !== "ALL" && r.status !== filter.status) return false;
-      if (filter.productId && r.productId && r.productId !== filter.productId) return false;
-      if (filter.preset !== "all") {
-        const { startDate, endDate } = computeEffectiveDateRange(filter, state.time.businessDate);
-        const rDate = r.createdAt.split("T")[0];
-        if (startDate && rDate < startDate) return false;
-        if (endDate && rDate > endDate) return false;
-      }
-      return true;
-    });
-  }, [state.rewards, state.time.businessDate, filter]);
+  useEffect(() => {
+    void reload(buildFilterOpts(filter, page, pageSize));
+  }, [filter, page, pageSize, reload, buildFilterOpts]);
 
-  const paginatedRewards = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredRewards.slice(start, start + pageSize);
-  }, [filteredRewards, page, pageSize]);
-
-  const total = filteredRewards.reduce((sum, reward) => sum + reward.amountPaise, 0);
+  const totalRewardsAmount = state.rewards.reduce((sum, reward) => sum + reward.amountPaise, 0);
 
   async function handleMarkReceived() {
     if (!selectedReward || submitting) return;
@@ -1079,12 +1097,12 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
   return (
     <>
       <PageTitle title="Offers" navigate={navigate} />
-      <BusinessDateFilter value={filter} onChange={setFilter} showStatusFilter showProductFilter products={state.products} />
+      <BusinessDateFilter value={filter} onChange={handleFilterChange} showStatusFilter showProductFilter products={state.products} />
       <section className="hero">
         <p className="hero-label">Filtered Offers Earned</p>
-        <h2 className="hero-value">{money(total)}</h2>
+        <h2 className="hero-value">{money(totalRewardsAmount)}</h2>
         <p className="hero-foot">
-          <Trophy size={17} /> {filteredRewards.length} earned Offer record{filteredRewards.length === 1 ? "" : "s"}
+          <Trophy size={17} /> {state.rewards.length} earned Offer record{state.rewards.length === 1 ? "" : "s"}
         </p>
       </section>
 
@@ -1095,10 +1113,10 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
         </div>
       </div>
 
-      {filteredRewards.length ? (
-        <>
-          <div className="list">
-            {paginatedRewards.map((reward) => {
+              {state.rewards.length ? (
+                <>
+                  <div className="list">
+                    {state.rewards.map((reward) => {
               const isEarned = reward.status === "EARNED";
               const isReceived = reward.status === "RECEIVED";
 
@@ -1189,13 +1207,13 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
           <Pagination
             currentPage={page}
             pageSize={pageSize}
-            totalItems={filteredRewards.length}
+            totalItems={state.rewardsCount ?? state.rewards.length}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
           />
         </>
       ) : (
-        <Empty icon={Trophy} text="No Offers earned in this session." />
+              <Empty icon={Trophy} text="No Offers earned for this filter." />
       )}
 
       {/* Confirmation Dialog for Receive */}
@@ -1266,53 +1284,46 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
   );
 }
 
-function HistoryScreen({ sales, closures, money, navigate, formatTimestamp }: { sales: SaleRecord[]; closures: DayCloseSnapshot[]; money: (value: number) => string; navigate: (screen: Screen) => void; formatTimestamp: (value: string) => string }) {
+function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
+  state: TrackerState;
+  money: (value: number) => string;
+  navigate: (screen: Screen) => void;
+  reload: (silentOrFilter?: boolean | DateFilterOptions) => Promise<void>;
+  formatTimestamp: (value: string) => string;
+}) {
   const [tab, setTab] = useState<"sales" | "closed-days">("sales");
   const [selectedClosure, setSelectedClosure] = useState<DayCloseSnapshot | null>(null);
   const [filter, setFilter] = useState<DateFilterValue>({ preset: "all" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  useEffect(() => {
+  const buildFilterOpts = useCallback((f: DateFilterValue, p: number, ps: number): DateFilterOptions => {
+    const opts: DateFilterOptions = { page: p, pageSize: ps };
+    if (f.preset !== "all") {
+      const { startDate, endDate } = computeEffectiveDateRange(f, state.time.businessDate);
+      if (startDate) opts.startDate = startDate;
+      if (endDate) opts.endDate = endDate;
+    }
+    if (f.productId) opts.productId = f.productId;
+    return opts;
+  }, [state.time.businessDate]);
+
+  const handleFilterChange = useCallback((newFilter: DateFilterValue) => {
+    setFilter(newFilter);
     setPage(1);
-  }, [filter, tab]);
+  }, []);
 
-  const filteredSales = useMemo(() => {
-    if (filter.preset === "all") return sales;
-    const { startDate, endDate } = computeEffectiveDateRange(filter, new Date().toISOString().split("T")[0]);
-    return sales.filter((s) => {
-      const bDate = s.businessDate || s.createdAt.split("T")[0];
-      if (startDate && bDate < startDate) return false;
-      if (endDate && bDate > endDate) return false;
-      return true;
-    });
-  }, [sales, filter]);
+  useEffect(() => {
+    void reload(buildFilterOpts(filter, page, pageSize));
+  }, [filter, page, pageSize, reload, buildFilterOpts]);
 
-  const filteredClosures = useMemo(() => {
-    if (filter.preset === "all") return closures;
-    const { startDate, endDate } = computeEffectiveDateRange(filter, new Date().toISOString().split("T")[0]);
-    return closures.filter((c) => {
-      const bDate = c.businessDate;
-      if (startDate && bDate < startDate) return false;
-      if (endDate && bDate > endDate) return false;
-      return true;
-    });
-  }, [closures, filter]);
-
-  const paginatedSales = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredSales.slice(start, start + pageSize);
-  }, [filteredSales, page, pageSize]);
-
-  const paginatedClosures = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredClosures.slice(start, start + pageSize);
-  }, [filteredClosures, page, pageSize]);
+  const salesCount = state.historySalesCount ?? state.historySales.length;
+  const closuresCount = state.historyClosuresCount ?? state.historyClosures.length;
 
   return (
     <>
       <PageTitle title="History & Closed Days" navigate={navigate} />
-      <BusinessDateFilter value={filter} onChange={setFilter} />
+      <BusinessDateFilter value={filter} onChange={handleFilterChange} />
       
       {/* Tab Switcher */}
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
@@ -1321,14 +1332,14 @@ function HistoryScreen({ sales, closures, money, navigate, formatTimestamp }: { 
           style={{ flex: 1, padding: "0.6rem", fontSize: "0.9rem" }}
           onClick={() => setTab("sales")}
         >
-          Sales History ({filteredSales.length})
+          Sales History ({salesCount})
         </button>
         <button
           className={tab === "closed-days" ? "primary-button" : "secondary-button"}
           style={{ flex: 1, padding: "0.6rem", fontSize: "0.9rem" }}
           onClick={() => setTab("closed-days")}
         >
-          Closed Business Days ({filteredClosures.length})
+          Closed Business Days ({closuresCount})
         </button>
       </div>
 
@@ -1337,13 +1348,13 @@ function HistoryScreen({ sales, closures, money, navigate, formatTimestamp }: { 
           <div className="section-head">
             <div>
               <h2>Sales History</h2>
-              <p>{filteredSales.length} preserved transaction record{filteredSales.length === 1 ? "" : "s"}</p>
+              <p>{salesCount} preserved transaction record{salesCount === 1 ? "" : "s"}</p>
             </div>
           </div>
-          {filteredSales.length ? (
+          {state.historySales.length ? (
             <>
               <div className="list">
-                {paginatedSales.map((sale) => (
+                {state.historySales.map((sale) => (
                   <article className="list-card" key={sale.id}>
                     <div className="list-row">
                       <div>
@@ -1367,7 +1378,7 @@ function HistoryScreen({ sales, closures, money, navigate, formatTimestamp }: { 
               <Pagination
                 currentPage={page}
                 pageSize={pageSize}
-                totalItems={filteredSales.length}
+                totalItems={salesCount}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
               />
@@ -1381,13 +1392,13 @@ function HistoryScreen({ sales, closures, money, navigate, formatTimestamp }: { 
           <div className="section-head">
             <div>
               <h2>Closed Business Days</h2>
-              <p>{filteredClosures.length} confirmed business day closure{filteredClosures.length === 1 ? "" : "s"}</p>
+              <p>{closuresCount} confirmed business day closure{closuresCount === 1 ? "" : "s"}</p>
             </div>
           </div>
-          {filteredClosures.length ? (
+          {state.historyClosures.length ? (
             <>
               <div className="list">
-                {paginatedClosures.map((c) => (
+                {state.historyClosures.map((c) => (
                   <article
                     className="list-card"
                     key={c.id}
@@ -1416,7 +1427,7 @@ function HistoryScreen({ sales, closures, money, navigate, formatTimestamp }: { 
               <Pagination
                 currentPage={page}
                 pageSize={pageSize}
-                totalItems={filteredClosures.length}
+                totalItems={closuresCount}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
               />

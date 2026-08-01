@@ -27,7 +27,8 @@ import type {
   DateFilterOptions,
   TrustedTimeState,
   FullCommissionReward,
-  DayExpense
+  DayExpense,
+  DashboardSummary
 } from "../../application/contracts.ts";
 import { DomainError } from "../../application/errors.ts";
 import { parseDatabaseTimestamp } from "./client.ts";
@@ -488,17 +489,17 @@ export class SupabaseStateRepository implements StateRepository {
 
     let historyQuery = supabase.from('sales').select('*, day_sessions!inner(business_date)').eq('salesman_id', context.salesmanId);
     let closuresQuery = supabase.from('day_closures').select('*').eq('salesman_id', context.salesmanId).eq('status', 'ACTIVE');
-    let rewardsQuery = supabase.from('full_commission_rewards').select('*').eq('salesman_id', context.salesmanId);
+    let rewardsQuery = supabase.from('full_commission_rewards').select('*, sales!inner(day_sessions!inner(business_date))').eq('salesman_id', context.salesmanId);
 
     if (filter?.startDate) {
       closuresQuery = closuresQuery.gte('business_date', filter.startDate);
-      historyQuery = historyQuery.gte('created_at', `${filter.startDate}T00:00:00.000Z`);
-      rewardsQuery = rewardsQuery.gte('created_at', `${filter.startDate}T00:00:00.000Z`);
+      historyQuery = historyQuery.gte('day_sessions.business_date', filter.startDate);
+      rewardsQuery = rewardsQuery.gte('sales.day_sessions.business_date', filter.startDate);
     }
     if (filter?.endDate) {
       closuresQuery = closuresQuery.lte('business_date', filter.endDate);
-      historyQuery = historyQuery.lte('created_at', `${filter.endDate}T23:59:59.999Z`);
-      rewardsQuery = rewardsQuery.lte('created_at', `${filter.endDate}T23:59:59.999Z`);
+      historyQuery = historyQuery.lte('day_sessions.business_date', filter.endDate);
+      rewardsQuery = rewardsQuery.lte('sales.day_sessions.business_date', filter.endDate);
     }
     if (filter?.productId) {
       historyQuery = historyQuery.eq('product_id', filter.productId);
@@ -508,25 +509,76 @@ export class SupabaseStateRepository implements StateRepository {
       rewardsQuery = rewardsQuery.eq('status', filter.status.toLowerCase());
     }
 
-    if (filter?.page && filter?.pageSize) {
-      const from = (filter.page - 1) * filter.pageSize;
-      const to = from + filter.pageSize - 1;
-      historyQuery = historyQuery.range(from, to);
-      rewardsQuery = rewardsQuery.range(from, to);
+    const usePagination = filter?.page != null && filter?.pageSize != null && filter.page > 0 && filter.pageSize > 0;
+    const pageFrom = usePagination ? (filter.page! - 1) * filter.pageSize! : 0;
+    const pageTo = usePagination ? pageFrom + filter.pageSize! - 1 : 0;
+
+    if (usePagination) {
+      historyQuery = historyQuery.range(pageFrom, pageTo);
+      rewardsQuery = rewardsQuery.range(pageFrom, pageTo);
+      closuresQuery = closuresQuery.range(pageFrom, pageTo);
     } else {
       historyQuery = historyQuery.limit(250);
       rewardsQuery = rewardsQuery.limit(250);
+      closuresQuery = closuresQuery.limit(100);
     }
 
-    const [productsRes, historyRes, closuresRes, rewardsRes] = await Promise.all([
+    // Count queries (with same filters, no pagination/range)
+    const historyCountQuery = supabase.from('sales').select('*, day_sessions!inner(business_date)', { count: 'exact', head: true }).eq('salesman_id', context.salesmanId);
+    const closuresCountQuery = supabase.from('day_closures').select('*', { count: 'exact', head: true }).eq('salesman_id', context.salesmanId).eq('status', 'ACTIVE');
+    const rewardsCountQuery = supabase.from('full_commission_rewards').select('*, sales!inner(day_sessions!inner(business_date))', { count: 'exact', head: true }).eq('salesman_id', context.salesmanId);
+
+    if (filter?.startDate) {
+      historyCountQuery.gte('day_sessions.business_date', filter.startDate);
+      closuresCountQuery.gte('business_date', filter.startDate);
+      rewardsCountQuery.gte('sales.day_sessions.business_date', filter.startDate);
+    }
+    if (filter?.endDate) {
+      historyCountQuery.lte('day_sessions.business_date', filter.endDate);
+      closuresCountQuery.lte('business_date', filter.endDate);
+      rewardsCountQuery.lte('sales.day_sessions.business_date', filter.endDate);
+    }
+    if (filter?.productId) {
+      historyCountQuery.eq('product_id', filter.productId);
+      rewardsCountQuery.eq('product_id', filter.productId);
+    }
+    if (filter?.status && filter.status !== 'ALL') {
+      rewardsCountQuery.eq('status', filter.status.toLowerCase());
+    }
+
+    const [productsRes, historyRes, closuresRes, rewardsRes, historyCountRes, closuresCountRes, rewardsCountRes] = await Promise.all([
       supabase.from('products')
         .select('id, name, selling_price_paise, commission_rules(normal_commission_paise, full_commission_paise, reward_threshold), commission_progress(normal_sales_completed, cycle_number)')
         .eq('active', true)
         .order('sort_order'),
       historyQuery.order('created_at', { ascending: false }),
-      closuresQuery.order('business_date', { ascending: false }).limit(100),
+      closuresQuery.order('business_date', { ascending: false }),
       rewardsQuery.order('created_at', { ascending: false }),
+      historyCountQuery,
+      closuresCountQuery,
+      rewardsCountQuery,
     ]);
+
+    let filteredDashboard: DashboardSummary | undefined;
+    if (filter?.startDate || filter?.endDate || filter?.productId) {
+      let filteredSalesQuery = supabase.from('sales')
+        .select('*, day_sessions!inner(business_date)')
+        .eq('salesman_id', context.salesmanId);
+      if (filter.startDate) filteredSalesQuery = filteredSalesQuery.gte('day_sessions.business_date', filter.startDate);
+      if (filter.endDate) filteredSalesQuery = filteredSalesQuery.lte('day_sessions.business_date', filter.endDate);
+      if (filter.productId) filteredSalesQuery = filteredSalesQuery.eq('product_id', filter.productId);
+
+      let filteredExpensesQuery = supabase.from('day_expenses')
+        .select('*, day_sessions!inner(business_date)')
+        .eq('company_id', context.companyId);
+      if (filter.startDate) filteredExpensesQuery = filteredExpensesQuery.gte('day_sessions.business_date', filter.startDate);
+      if (filter.endDate) filteredExpensesQuery = filteredExpensesQuery.lte('day_sessions.business_date', filter.endDate);
+
+      const [filteredSalesRes, filteredExpensesRes] = await Promise.all([filteredSalesQuery, filteredExpensesQuery]);
+      const filteredSales = (filteredSalesRes.data || []).map((row: DbRow) => saleFromSupabaseRow(row));
+      const filteredExpensesTotal = (filteredExpensesRes.data || []).reduce((sum, row) => sum + Number(row.amount_paise || 0), 0);
+      filteredDashboard = summarizeSales(filteredSales, filteredExpensesTotal);
+    }
     
     const rewards = (rewardsRes.data || []).map((row: DbRow) => ({
       id: String(row.id),
@@ -604,10 +656,14 @@ export class SupabaseStateRepository implements StateRepository {
       daySessionStatus,
       openingState: decision.openingState,
       sales,
-      rewards,
       dayCloseSnapshot,
+      filteredDashboard,
       historySales,
+      historySalesCount: historyCountRes.count ?? historySales.length,
       historyClosures,
+      historyClosuresCount: closuresCountRes.count ?? historyClosures.length,
+      rewards,
+      rewardsCount: rewardsCountRes.count ?? rewards.length,
       expenses,
       reopenEligibility,
       resetEligibility: daySession
