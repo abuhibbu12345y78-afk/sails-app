@@ -30,7 +30,7 @@ begin
     where id = p_reward_id returning * into v_reward;
 
   insert into public.audit_logs (tenant_id, company_id, actor_id, action, entity_type, entity_id, metadata)
-    values (v_reward.tenant_id, v_reward.company_id, coalesce(auth.uid(), p_salesman_id), 'offer.undo_received', 'full_commission_reward',
+    values (v_reward.tenant_id, v_reward.company_id, auth.uid(), 'offer.undo_received', 'full_commission_reward',
       v_reward.id, jsonb_build_object('undone_at', now()));
       
   return v_reward;
