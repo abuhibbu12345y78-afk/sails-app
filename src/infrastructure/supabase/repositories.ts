@@ -1,5 +1,5 @@
-import { createAdminClient } from "./client";
-import {
+import { createAdminClient } from "./client.ts";
+import type {
   DaySessionRepository,
   SaleRepository,
   SettingsRepository,
@@ -17,8 +17,8 @@ import {
   CreateSaleResult,
   ExpenseRepository,
   CreateExpenseInput
-} from "../../application/repositories";
-import {
+} from "../../application/repositories.ts";
+import type {
   TrackerState,
   DaySession,
   SaleRecord,
@@ -28,13 +28,13 @@ import {
   TrustedTimeState,
   FullCommissionReward,
   DayExpense
-} from "../../application/contracts";
-import { DomainError } from "../../application/errors";
-import { parseDatabaseTimestamp } from "./client";
-import { getActiveContext } from "./context";
-import { DEFAULT_BUSINESS_TIMEZONE } from "../../domain/business-time";
-import { summarizeSales } from "../../application/summary";
-import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase, canResetBusinessDayUseCase } from "../../application/business-day-use-cases";
+} from "../../application/contracts.ts";
+import { DomainError } from "../../application/errors.ts";
+import { parseDatabaseTimestamp } from "./client.ts";
+import { getActiveContext } from "./context.ts";
+import { DEFAULT_BUSINESS_TIMEZONE } from "../../domain/business-time.ts";
+import { summarizeSales } from "../../application/summary.ts";
+import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase, canResetBusinessDayUseCase } from "../../application/business-day-use-cases.ts";
 
 type DbRow = Record<string, unknown>;
 
@@ -508,14 +508,24 @@ export class SupabaseStateRepository implements StateRepository {
       rewardsQuery = rewardsQuery.eq('status', filter.status.toLowerCase());
     }
 
+    if (filter?.page && filter?.pageSize) {
+      const from = (filter.page - 1) * filter.pageSize;
+      const to = from + filter.pageSize - 1;
+      historyQuery = historyQuery.range(from, to);
+      rewardsQuery = rewardsQuery.range(from, to);
+    } else {
+      historyQuery = historyQuery.limit(250);
+      rewardsQuery = rewardsQuery.limit(250);
+    }
+
     const [productsRes, historyRes, closuresRes, rewardsRes] = await Promise.all([
       supabase.from('products')
         .select('id, name, selling_price_paise, commission_rules(normal_commission_paise, full_commission_paise, reward_threshold), commission_progress(normal_sales_completed, cycle_number)')
         .eq('active', true)
         .order('sort_order'),
-      historyQuery.order('created_at', { ascending: false }).limit(250),
+      historyQuery.order('created_at', { ascending: false }),
       closuresQuery.order('business_date', { ascending: false }).limit(100),
-      rewardsQuery.order('created_at', { ascending: false }).limit(250),
+      rewardsQuery.order('created_at', { ascending: false }),
     ]);
     
     const rewards = (rewardsRes.data || []).map((row: DbRow) => ({

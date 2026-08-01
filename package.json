@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --experimental-strip-types --test tests/commission.test.ts tests/business-day.test.ts tests/business-day-workflow.test.ts tests/expense-settlement.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/commission.test.ts tests/business-day.test.ts tests/business-day-workflow.test.ts tests/expense-settlement.test.ts tests/supabase-reset.test.ts",
     "test": "npm run test:unit && npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"

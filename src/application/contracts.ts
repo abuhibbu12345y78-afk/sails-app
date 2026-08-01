@@ -105,6 +105,8 @@ export interface DateFilterOptions {
   endDate?: string;
   status?: "ALL" | "EARNED" | "RECEIVED";
   productId?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface TrackerState {

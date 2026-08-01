@@ -49,6 +49,283 @@ function sessionLabel(status: TrackerState["daySessionStatus"]) {
   }[status];
 }
 
+function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps & {
+  money: (value: number) => string;
+  navigate: (screen: Screen) => void;
+  reload: (silent?: boolean) => Promise<void>;
+  showToast: (toast: ToastState) => void;
+}) {
+  const session = state.daySession;
+  const isSessionOpen = session?.status === "OPEN";
+
+  const expenses = state.expenses || [];
+  const petrolExpense = expenses.find((e) => e.category === "Petrol");
+  const foodExpense = expenses.find((e) => e.category === "Food");
+  const otherExpenses = expenses.filter((e) => e.category === "Other");
+
+  const [petrolRupees, setPetrolRupees] = useState(petrolExpense ? String(petrolExpense.amountPaise / 100) : "");
+  const [foodRupees, setFoodRupees] = useState(foodExpense ? String(foodExpense.amountPaise / 100) : "");
+
+  const [otherDescription, setOtherDescription] = useState("");
+  const [otherRupees, setOtherRupees] = useState("");
+  const [savingCategory, setSavingCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (petrolExpense) setPetrolRupees(String(petrolExpense.amountPaise / 100));
+    else setPetrolRupees("");
+    if (foodExpense) setFoodRupees(String(foodExpense.amountPaise / 100));
+    else setFoodRupees("");
+  }, [expenses]);
+
+  const totalOtherPaise = otherExpenses.reduce((sum, e) => sum + e.amountPaise, 0);
+  const totalExpensesPaise = state.dashboard.totalExpensesPaise || expenses.reduce((sum, e) => sum + e.amountPaise, 0);
+
+  async function handleSaveSingleCategory(category: "Petrol" | "Food", valStr: string) {
+    if (!session || !isSessionOpen) return;
+    const existing = category === "Petrol" ? petrolExpense : foodExpense;
+    const amountRupees = parseFloat(valStr);
+    
+    if (isNaN(amountRupees) || amountRupees <= 0) {
+      if (existing) {
+        setSavingCategory(category);
+        try {
+          await api("/api/expenses", {
+            method: "POST",
+            body: JSON.stringify({ action: "delete", expenseId: existing.id }),
+          });
+          await reload(true);
+          showToast({ message: `${category} expense removed.` });
+        } catch (err) {
+          showToast({ message: err instanceof Error ? err.message : "Failed to delete expense", error: true });
+        } finally {
+          setSavingCategory(null);
+        }
+      }
+      return;
+    }
+
+    const amountPaise = Math.round(amountRupees * 100);
+    setSavingCategory(category);
+
+    try {
+      if (existing) {
+        await api("/api/expenses", {
+          method: "POST",
+          body: JSON.stringify({ action: "update", expenseId: existing.id, amountPaise }),
+        });
+      } else {
+        await api("/api/expenses", {
+          method: "POST",
+          body: JSON.stringify({ sessionId: session.id, category, amountPaise }),
+        });
+      }
+      await reload(true);
+      showToast({ message: `${category} expense saved.` });
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to save expense", error: true });
+    } finally {
+      setSavingCategory(null);
+    }
+  }
+
+  async function handleAddOtherExpense() {
+    if (!session || !isSessionOpen) return;
+    const amountRupees = parseFloat(otherRupees);
+    if (isNaN(amountRupees) || amountRupees <= 0) {
+      showToast({ message: "Please enter a valid amount for Other expense.", error: true });
+      return;
+    }
+    const amountPaise = Math.round(amountRupees * 100);
+    setSavingCategory("Other");
+
+    try {
+      await api("/api/expenses", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: session.id,
+          category: "Other",
+          amountPaise,
+          description: otherDescription.trim() || undefined,
+        }),
+      });
+      setOtherRupees("");
+      setOtherDescription("");
+      await reload(true);
+      showToast({ message: "Other expense added." });
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to add expense", error: true });
+    } finally {
+      setSavingCategory(null);
+    }
+  }
+
+  async function handleDeleteExpense(expenseId: string) {
+    if (!session || !isSessionOpen) return;
+    setSavingCategory(expenseId);
+    try {
+      await api("/api/expenses", {
+        method: "POST",
+        body: JSON.stringify({ action: "delete", expenseId }),
+      });
+      await reload(true);
+      showToast({ message: "Expense deleted." });
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : "Failed to delete expense", error: true });
+    } finally {
+      setSavingCategory(null);
+    }
+  }
+
+  return (
+    <>
+      <PageTitle title="Daily Expenses" navigate={navigate} />
+
+      {!isSessionOpen ? (
+        <section className="settings-card">
+          <p style={{ textAlign: "center", color: "var(--muted)" }}>
+            Expenses can only be added to an active business day. Start a day to record expenses.
+          </p>
+        </section>
+      ) : (
+        <>
+          <section className="hero">
+            <p className="hero-label">Total Daily Expenses</p>
+            <h2 className="hero-value">{money(totalExpensesPaise)}</h2>
+            <p className="hero-foot">
+              Deducted from Company Payable (never reduces commission)
+            </p>
+          </section>
+
+          <section className="settings-card" style={{ marginBottom: "1rem" }}>
+            <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}>Standard Expenses</h3>
+
+            <div className="field" style={{ marginBottom: "1.25rem" }}>
+              <label htmlFor="petrol-input">Petrol Expense (₹)</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  id="petrol-input"
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={petrolRupees}
+                  onChange={(e) => setPetrolRupees(e.target.value)}
+                />
+                <button
+                  className="secondary-button"
+                  style={{ width: "auto", minWidth: "80px" }}
+                  disabled={savingCategory === "Petrol"}
+                  onClick={() => void handleSaveSingleCategory("Petrol", petrolRupees)}
+                >
+                  {savingCategory === "Petrol" ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="food-input">Food Expense (₹)</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  id="food-input"
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={foodRupees}
+                  onChange={(e) => setFoodRupees(e.target.value)}
+                />
+                <button
+                  className="secondary-button"
+                  style={{ width: "auto", minWidth: "80px" }}
+                  disabled={savingCategory === "Food"}
+                  onClick={() => void handleSaveSingleCategory("Food", foodRupees)}
+                >
+                  {savingCategory === "Food" ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}>Other Expenses</h3>
+            
+            <div className="field" style={{ marginBottom: "1rem" }}>
+              <label htmlFor="other-desc">Description (Optional)</label>
+              <input
+                id="other-desc"
+                type="text"
+                placeholder="e.g. Toll tax, Parking"
+                value={otherDescription}
+                onChange={(e) => setOtherDescription(e.target.value)}
+                maxLength={200}
+              />
+            </div>
+
+            <div className="field" style={{ marginBottom: "1.25rem" }}>
+              <label htmlFor="other-amount">Amount (₹)</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  id="other-amount"
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  value={otherRupees}
+                  onChange={(e) => setOtherRupees(e.target.value)}
+                />
+                <button
+                  className="secondary-button"
+                  style={{ width: "auto", minWidth: "80px" }}
+                  disabled={savingCategory === "Other" || !otherRupees}
+                  onClick={() => void handleAddOtherExpense()}
+                >
+                  {savingCategory === "Other" ? "Adding..." : "Add"}
+                </button>
+              </div>
+            </div>
+
+            <div className="home-summary-divider" style={{ margin: "1.5rem 0" }} />
+
+            <h4 style={{ margin: "0 0 0.75rem 0", fontSize: "0.95rem", color: "var(--muted)" }}>
+              Added Other Expenses ({otherExpenses.length})
+            </h4>
+
+            {otherExpenses.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {otherExpenses.map((expense) => (
+                  <div key={expense.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.75rem", background: "var(--background)", borderRadius: "var(--radius)" }}>
+                    <div>
+                      <strong style={{ display: "block", fontSize: "0.95rem" }}>
+                        {money(expense.amountPaise)}
+                      </strong>
+                      <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>
+                        {expense.description || "No description"}
+                      </span>
+                    </div>
+                    <button
+                      className="close-button"
+                      disabled={savingCategory === expense.id}
+                      onClick={() => void handleDeleteExpense(expense.id)}
+                      aria-label="Delete expense"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px dashed var(--border)", fontWeight: 600 }}>
+                  <span>Total Other</span>
+                  <span>{money(totalOtherPaise)}</span>
+                </div>
+              </div>
+            ) : (
+              <p style={{ textAlign: "center", color: "var(--muted)", fontSize: "0.85rem", margin: 0 }}>
+                No other expenses recorded for today.
+              </p>
+            )}
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
 export function TrackerApp() {
   const [screen, setScreen] = useState<Screen>("home");
   const [state, setState] = useState<TrackerState | null>(null);
@@ -1207,7 +1484,40 @@ function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, sh
     <section className="session-timing"><div><span>Business Date</span><strong>{state.daySession?.businessDate ?? "Not started"}</strong></div><div><span>Started</span><strong>{startedAt ? clock.formatTime(startedAt, false) : "—"}</strong></div><div><span>Current Time</span><strong>{clock.formatTime(trustedTime, false)}</strong></div><div><span>Closed</span><strong>{confirmedCloseTime ? clock.formatTime(new Date(confirmedCloseTime), false) : "Not closed"}</strong></div><div><span>Working Duration</span><strong>{startedAt ? formatWorkingDuration(startedAt, durationEnd) : "—"}</strong></div></section>
     <div className="section-head"><div><h2>Product-wise stock review</h2><p>Review every picked, sold, and remaining quantity.</p></div></div>
     <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><h3>{item.productName}</h3><span className="badge">{item.remainingQuantity} remaining</span></div><div className="stock-strip"><span>Picked <strong>{item.pickedQuantity}</strong></span><span>Sold <strong>{item.soldQuantity}</strong></span><span>Remaining <strong>{item.remainingQuantity}</strong></span></div></article>)}</div>
-    <section className="close-summary"><h2>Session summary</h2><div className="review-row"><span>Total Units Sold</span><strong>{state.dashboard.totalUnits}</strong></div><div className="review-row"><span>Gross Sales</span><strong>{money(state.dashboard.grossSalesPaise)}</strong></div><div className="review-row"><span>Normal Commission</span><strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></div><div className="review-row"><span>Offers Earned</span><strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></div><div className="review-row"><span>Salesperson Earnings</span><strong>{money(state.dashboard.totalEarningsPaise)}</strong></div><div className="review-row"><span>Daily Expenses</span><strong>{money(state.dashboard.totalExpensesPaise)}</strong></div><div className="review-row"><span>Company Payable</span><strong>{money(state.dashboard.netCollectionPaise)}</strong></div></section>
+    <section className="close-summary">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+        <h2 style={{ margin: 0 }}>Session summary</h2>
+        {state.daySession?.status === "OPEN" && (
+          <button
+            className="secondary-button"
+            style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem", minHeight: "auto", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+            onClick={() => navigate("expenses")}
+          >
+            <WalletCards size={15} /> Add / Edit Expenses
+          </button>
+        )}
+      </div>
+      <div className="review-row"><span>Total Units Sold</span><strong>{state.dashboard.totalUnits}</strong></div>
+      <div className="review-row"><span>Gross Sales</span><strong>{money(state.dashboard.grossSalesPaise)}</strong></div>
+      <div className="review-row"><span>Normal Commission</span><strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></div>
+      <div className="review-row"><span>Offers Earned</span><strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></div>
+      <div className="review-row"><span>Salesperson Earnings</span><strong>{money(state.dashboard.totalEarningsPaise)}</strong></div>
+      <div className="review-row" style={{ background: "rgba(245, 158, 11, 0.08)", padding: "0.4rem 0.6rem", borderRadius: "6px", margin: "0.2rem 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span>Daily Expenses</span>
+          {state.daySession?.status === "OPEN" && (
+            <button
+              style={{ background: "none", border: "none", color: "var(--primary-color)", fontSize: "0.75rem", textDecoration: "underline", cursor: "pointer", padding: 0 }}
+              onClick={() => navigate("expenses")}
+            >
+              (Edit)
+            </button>
+          )}
+        </div>
+        <strong>{money(state.dashboard.totalExpensesPaise)}</strong>
+      </div>
+      <div className="review-row"><span>Company Payable</span><strong>{money(state.dashboard.netCollectionPaise)}</strong></div>
+    </section>
     {report ? <><pre className="list-card report-text">{report}</pre><button className="secondary-button full-width" onClick={() => void copyReport()}>Copy Message</button></> :
       <button className="primary-button full-width" disabled={closing || state.daySession?.status !== "OPEN" || !clock.synchronized} onClick={() => setConfirmOpen(true)}><CalendarCheck size={20} />{state.daySession?.status === "CLOSED" ? "Day Already Closed" : !clock.synchronized ? "Waiting for trusted time" : "CONTINUE TO DAY CLOSE"}</button>}
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -1469,274 +1779,7 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
   </>;
 }
 
-function ExpenseScreen({ state, money, navigate, reload, showToast }: TimeProps & {
-  money: (value: number) => string;
-  navigate: (screen: Screen) => void;
-  reload: (silent?: boolean) => Promise<void>;
-  showToast: (toast: ToastState) => void;
-}) {
-  const session = state.daySession;
-  const isSessionOpen = session?.status === "OPEN";
 
-  const expenses = state.expenses || [];
-  const petrolExpense = expenses.find((e) => e.category === "Petrol");
-  const foodExpense = expenses.find((e) => e.category === "Food");
-  const otherExpenses = expenses.filter((e) => e.category === "Other");
-
-  const [petrolRupees, setPetrolRupees] = useState(petrolExpense ? String(petrolExpense.amountPaise / 100) : "");
-  const [foodRupees, setFoodRupees] = useState(foodExpense ? String(foodExpense.amountPaise / 100) : "");
-
-  const [otherDescription, setOtherDescription] = useState("");
-  const [otherRupees, setOtherRupees] = useState("");
-  const [savingCategory, setSavingCategory] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (petrolExpense) setPetrolRupees(String(petrolExpense.amountPaise / 100));
-    else setPetrolRupees("");
-    if (foodExpense) setFoodRupees(String(foodExpense.amountPaise / 100));
-    else setFoodRupees("");
-  }, [expenses]);
-
-  const totalOtherPaise = otherExpenses.reduce((sum, e) => sum + e.amountPaise, 0);
-  const totalExpensesPaise = state.dashboard.totalExpensesPaise || expenses.reduce((sum, e) => sum + e.amountPaise, 0);
-
-  async function handleSaveSingleCategory(category: "Petrol" | "Food", valStr: string) {
-    if (!session || !isSessionOpen) return;
-    const existing = category === "Petrol" ? petrolExpense : foodExpense;
-    const amountRupees = parseFloat(valStr);
-    
-    if (isNaN(amountRupees) || amountRupees <= 0) {
-      if (existing) {
-        setSavingCategory(category);
-        try {
-          await api("/api/expenses", {
-            method: "POST",
-            body: JSON.stringify({ action: "delete", expenseId: existing.id }),
-          });
-          await reload(true);
-          showToast({ message: `${category} expense removed.` });
-        } catch (err) {
-          showToast({ message: err instanceof Error ? err.message : "Failed to delete expense", error: true });
-        } finally {
-          setSavingCategory(null);
-        }
-      }
-      return;
-    }
-
-    const amountPaise = Math.round(amountRupees * 100);
-    setSavingCategory(category);
-
-    try {
-      if (existing) {
-        await api("/api/expenses", {
-          method: "POST",
-          body: JSON.stringify({ action: "update", expenseId: existing.id, amountPaise }),
-        });
-      } else {
-        await api("/api/expenses", {
-          method: "POST",
-          body: JSON.stringify({ sessionId: session.id, category, amountPaise }),
-        });
-      }
-      await reload(true);
-      showToast({ message: `${category} expense saved.` });
-    } catch (err) {
-      showToast({ message: err instanceof Error ? err.message : "Failed to save expense", error: true });
-    } finally {
-      setSavingCategory(null);
-    }
-  }
-
-  async function handleAddOtherExpense() {
-    if (!session || !isSessionOpen) return;
-    const amountRupees = parseFloat(otherRupees);
-    if (isNaN(amountRupees) || amountRupees <= 0) {
-      showToast({ message: "Please enter a valid amount for Other expense.", error: true });
-      return;
-    }
-    const amountPaise = Math.round(amountRupees * 100);
-    setSavingCategory("Other");
-
-    try {
-      await api("/api/expenses", {
-        method: "POST",
-        body: JSON.stringify({
-          sessionId: session.id,
-          category: "Other",
-          amountPaise,
-          description: otherDescription.trim() || undefined,
-        }),
-      });
-      setOtherRupees("");
-      setOtherDescription("");
-      await reload(true);
-      showToast({ message: "Other expense added." });
-    } catch (err) {
-      showToast({ message: err instanceof Error ? err.message : "Failed to add expense", error: true });
-    } finally {
-      setSavingCategory(null);
-    }
-  }
-
-  async function handleDeleteExpense(expenseId: string) {
-    if (!session || !isSessionOpen) return;
-    setSavingCategory(expenseId);
-    try {
-      await api("/api/expenses", {
-        method: "POST",
-        body: JSON.stringify({ action: "delete", expenseId }),
-      });
-      await reload(true);
-      showToast({ message: "Expense deleted." });
-    } catch (err) {
-      showToast({ message: err instanceof Error ? err.message : "Failed to delete expense", error: true });
-    } finally {
-      setSavingCategory(null);
-    }
-  }
-
-  return (
-    <>
-      <PageTitle title="Daily Expenses" navigate={navigate} />
-
-      {!isSessionOpen ? (
-        <section className="settings-card">
-          <p style={{ textAlign: "center", color: "var(--muted)" }}>
-            Expenses can only be added to an active business day. Start a day to record expenses.
-          </p>
-        </section>
-      ) : (
-        <>
-          <section className="hero">
-            <p className="hero-label">Total Daily Expenses</p>
-            <h2 className="hero-value">{money(totalExpensesPaise)}</h2>
-            <p className="hero-foot">
-              Deducted from Company Payable (never reduces commission)
-            </p>
-          </section>
-
-          <section className="settings-card" style={{ marginBottom: "1rem" }}>
-            <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.1rem" }}>Standard Expenses</h3>
-
-            <div className="field" style={{ marginBottom: "1.25rem" }}>
-              <label htmlFor="petrol-input">Petrol Expense (₹)</label>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input
-                  id="petrol-input"
-                  type="number"
-                  step="any"
-                  placeholder="0.00"
-                  value={petrolRupees}
-                  onChange={(e) => setPetrolRupees(e.target.value)}
-                />
-                <button
-                  className="secondary-button"
-                  style={{ width: "auto", minWidth: "80px" }}
-                  disabled={savingCategory === "Petrol"}
-                  onClick={() => void handleSaveSingleCategory("Petrol", petrolRupees)}
-                >
-                  {savingCategory === "Petrol" ? "Saving..." : "Save"}
-                </button>
-              </div>
-            </div>
-
-            <div className="field">
-              <label htmlFor="food-input">Food Expense (₹)</label>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input
-                  id="food-input"
-                  type="number"
-                  step="any"
-                  placeholder="0.00"
-                  value={foodRupees}
-                  onChange={(e) => setFoodRupees(e.target.value)}
-                />
-                <button
-                  className="secondary-button"
-                  style={{ width: "auto", minWidth: "80px" }}
-                  disabled={savingCategory === "Food"}
-                  onClick={() => void handleSaveSingleCategory("Food", foodRupees)}
-                >
-                  {savingCategory === "Food" ? "Saving..." : "Save"}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section className="settings-card" style={{ marginBottom: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Other Expenses</h3>
-              <strong style={{ fontSize: "0.95rem", color: "var(--primary-color)" }}>
-                Total: {money(totalOtherPaise)}
-              </strong>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.25rem", background: "rgba(255,255,255,0.03)", padding: "0.85rem", borderRadius: "8px", border: "1px solid var(--border-color, #333)" }}>
-              <div className="field">
-                <label htmlFor="other-desc">Description (e.g. Parking, Repair, Toll)</label>
-                <input
-                  id="other-desc"
-                  placeholder="e.g. Parking charge"
-                  value={otherDescription}
-                  onChange={(e) => setOtherDescription(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="other-amt">Amount (₹)</label>
-                <input
-                  id="other-amt"
-                  type="number"
-                  step="any"
-                  placeholder="0.00"
-                  value={otherRupees}
-                  onChange={(e) => setOtherRupees(e.target.value)}
-                />
-              </div>
-              <button
-                className="primary-button full-width"
-                disabled={savingCategory === "Other" || !otherRupees}
-                onClick={() => void handleAddOtherExpense()}
-              >
-                {savingCategory === "Other" ? "Adding..." : "+ Add Other Expense"}
-              </button>
-            </div>
-
-            {otherExpenses.length > 0 ? (
-              <div className="list">
-                {otherExpenses.map((exp) => (
-                  <article key={exp.id} className="list-card" style={{ padding: "0.75rem", marginBottom: "0.5rem" }}>
-                    <div className="list-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <h4 style={{ margin: 0, fontSize: "0.95rem" }}>{exp.description || "Other Expense"}</h4>
-                        <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>Category: Other</span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <strong style={{ fontSize: "1rem" }}>{money(exp.amountPaise)}</strong>
-                        <button
-                          className="secondary-button"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", minHeight: "auto" }}
-                          disabled={savingCategory === exp.id}
-                          onClick={() => void handleDeleteExpense(exp.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p style={{ textAlign: "center", color: "var(--muted)", fontSize: "0.85rem", margin: 0 }}>
-                No other expenses recorded for today.
-              </p>
-            )}
-          </section>
-        </>
-      )}
-    </>
-  );
-}
 
 function Empty({ icon: Icon, text }: { icon: typeof Gift; text: string }) {
   return <div className="empty-card"><Icon size={30} /><div>{text}</div></div>;
