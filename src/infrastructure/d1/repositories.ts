@@ -18,7 +18,7 @@ import {
   StartDayResult,
   StateRepository,
 } from "../../application/repositories";
-import type { AppSettings, DayCloseSnapshot, DaySession, DaySessionStatus, DayStockItem, SaleRecord, TrackerState, TrustedTimeState } from "../../application/contracts";
+import type { AppSettings, DateFilterOptions, DayCloseSnapshot, DaySession, DaySessionStatus, DayStockItem, SaleRecord, TrackerState, TrustedTimeState } from "../../application/contracts";
 import { calculateSale, formatCurrency } from "../../domain/commission";
 import { validateDailySale } from "../../domain/day-session";
 import { getCurrentBusinessDayStateUseCase, reopenBusinessDayUseCase, previewAdditionalPickupUseCase, canResetBusinessDayUseCase } from "../../application/business-day-use-cases";
@@ -481,7 +481,7 @@ export class D1SettingsRepository implements SettingsRepository {
 }
 
 export class D1StateRepository implements StateRepository {
-  async getTrackerState(): Promise<TrackerState> {
+  async getTrackerState(filter?: DateFilterOptions): Promise<TrackerState> {
     const db = await ensureDatabase();
     const settingsRow = await db.prepare("SELECT * FROM settings WHERE id = 'default'").first<Row>();
     const settings: AppSettings = {
@@ -567,17 +567,27 @@ export class D1StateRepository implements StateRepository {
       }
     }
 
-    const [productsResult, historyResult] = await Promise.all([
+    const [productsResult, historyResult, closuresResult] = await Promise.all([
       db.prepare(`SELECT p.*, cp.normal_sales_completed, cp.cycle_number
         FROM products p JOIN commission_progress cp ON cp.product_id = p.id
         WHERE p.active = 1 ORDER BY p.sort_order`).all<Row>(),
       db.prepare(`SELECT s.*, dss.business_date FROM sales s
         JOIN day_session_sales dss ON dss.sale_id = s.id
         ORDER BY s.created_at DESC LIMIT 250`).all<Row>(),
+      db.prepare(`SELECT * FROM day_close_snapshots WHERE status = 'ACTIVE' ORDER BY business_date DESC LIMIT 100`).all<Row>(),
     ]);
     const historySales = historyResult.results.map((row) => ({
       ...saleFromRow(row),
       businessDate: String(row.business_date),
+    }));
+    const historyClosures = closuresResult.results.map((row) => ({
+      id: String(row.id),
+      businessDate: String(row.business_date),
+      closureVersion: Number(row.closure_version),
+      status: String(row.status) as "ACTIVE" | "SUPERSEDED",
+      reportText: String(row.report_text),
+      whatsappReportStatus: String(row.whatsapp_report_status) as "CURRENT" | "OUTDATED",
+      createdAt: isoTimestamp(row.created_at),
     }));
     const status = ({
       NEW_DAY: "NOT_STARTED",
@@ -631,6 +641,7 @@ export class D1StateRepository implements StateRepository {
         })
         : { allowed: false, reason: "No closed Business Day is available." },
       historySales,
+      historyClosures,
       expenses: [],
       lastUpdatedAt: time.serverTimeIso,
     };

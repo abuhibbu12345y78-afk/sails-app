@@ -60,6 +60,7 @@ export interface DayExpense {
   daySessionId: string;
   category: "Petrol" | "Food" | "Other";
   amountPaise: number;
+  description?: string;
   createdAt: string;
 }
 
@@ -83,6 +84,7 @@ export interface DayCloseSnapshot {
   closureVersion: number;
   status: "ACTIVE" | "SUPERSEDED";
   reportText: string;
+  totalExpensesPaise?: number;
   whatsappReportStatus: "CURRENT" | "OUTDATED";
   createdAt: string;
 }
@@ -96,6 +98,13 @@ export interface TrustedTimeState {
   serverTime: string;
   businessDate: string;
   timezone: string;
+}
+
+export interface DateFilterOptions {
+  startDate?: string;
+  endDate?: string;
+  status?: "ALL" | "EARNED" | "RECEIVED";
+  productId?: string;
 }
 
 export interface TrackerState {
@@ -113,6 +122,7 @@ export interface TrackerState {
   reopenEligibility: ReopenEligibility;
   resetEligibility: ReopenEligibility;
   historySales: SaleRecord[];
+  historyClosures: DayCloseSnapshot[];
   expenses: DayExpense[];
   lastUpdatedAt: string;
 }

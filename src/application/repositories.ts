@@ -107,8 +107,10 @@ export interface SettingsRepository {
   updateSettings(settings: Partial<AppSettings>): Promise<void>;
 }
 
+import type { DateFilterOptions } from "./contracts";
+
 export interface StateRepository {
-  getTrackerState(): Promise<TrackerState>;
+  getTrackerState(filter?: DateFilterOptions): Promise<TrackerState>;
   getTrustedTime(): Promise<TrustedTimeState>;
 }
 
@@ -116,10 +118,12 @@ export interface CreateExpenseInput {
   sessionId: string;
   category: "Petrol" | "Food" | "Other";
   amountPaise: number;
+  description?: string;
 }
 
 export interface ExpenseRepository {
   addExpense(input: CreateExpenseInput): Promise<DayExpense>;
+  updateExpense(expenseId: string, input: { amountPaise?: number; description?: string }): Promise<DayExpense>;
   deleteExpense(expenseId: string): Promise<void>;
   getExpenses(sessionId: string): Promise<DayExpense[]>;
 }

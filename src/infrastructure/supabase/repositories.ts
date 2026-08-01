@@ -14,7 +14,9 @@ import {
   HistoricalDataInput,
   HistoricalDataResult,
   CreateSaleInput, 
-  CreateSaleResult
+  CreateSaleResult,
+  ExpenseRepository,
+  CreateExpenseInput
 } from "../../application/repositories";
 import {
   TrackerState,
@@ -22,8 +24,10 @@ import {
   SaleRecord,
   DayCloseSnapshot,
   AppSettings,
+  DateFilterOptions,
   TrustedTimeState,
-  FullCommissionReward
+  FullCommissionReward,
+  DayExpense
 } from "../../application/contracts";
 import { DomainError } from "../../application/errors";
 import { parseDatabaseTimestamp } from "./client";
@@ -277,64 +281,15 @@ export class SupabaseDaySessionRepository implements DaySessionRepository {
     const supabase = createAdminClient();
     const context = await getActiveContext(supabase);
 
-    // Verify session exists and belongs to the salesman
-    const { data: session, error: sessErr } = await supabase
-      .from('day_sessions')
-      .select('*')
-      .eq('id', sessionId)
-      .eq('salesman_id', context.salesmanId)
-      .single();
-      
-    if (sessErr || !session) {
-      throw new DomainError("The Business Day could not be found.", 404);
-    }
-
-    // Check for newer sessions
-    const { data: laterSession } = await supabase
-      .from('day_sessions')
-      .select('id')
-      .eq('salesman_id', context.salesmanId)
-      .gt('business_date', session.business_date)
-      .limit(1);
-
-    if (laterSession && laterSession.length > 0) {
-      throw new DomainError("Cannot reset a day because a newer session already exists.");
-    }
-
-    // Perform deletions in correct dependency order based on actual Supabase schema
-    // 1. Find and delete sales associated with this day session
-    const { data: sales } = await supabase
-      .from('sales')
-      .select('id')
-      .eq('day_session_id', sessionId);
-
-    if (sales && sales.length > 0) {
-      const saleIds = sales.map((s: { id: unknown }) => String(s.id));
-      await supabase.from('full_commission_rewards').delete().in('sale_id', saleIds);
-      await supabase.from('sales').delete().in('id', saleIds);
-    }
-
-    // 2. Delete stock items, reopens, and closures
-    await supabase.from('day_stock_items').delete().eq('day_session_id', sessionId);
-    await supabase.from('day_reopens').delete().eq('day_session_id', sessionId);
-    await supabase.from('day_closures').delete().eq('salesman_id', context.salesmanId).eq('business_date', session.business_date);
-    
-    // 3. Delete the day session itself
-    const { error: deleteErr } = await supabase.from('day_sessions').delete().eq('id', sessionId);
-    if (deleteErr) {
-      throw new Error(`Failed to delete day session: ${deleteErr.message}`);
-    }
-
-    // 4. Log the audit event matching live audit_logs columns
-    await supabase.from('audit_logs').insert({
-      tenant_id: context.tenantId,
-      company_id: context.companyId,
-      actor_id: context.salesmanId,
-      action: 'day.reset',
-      entity_type: 'day_session',
-      entity_id: sessionId,
-      metadata: { businessDate: session.business_date }
+    const { error } = await supabase.rpc("reset_day_atomic", {
+      p_salesman_id: context.salesmanId,
+      p_session_id: sessionId,
     });
+
+    if (error) {
+      console.error("Reset Day RPC Error:", error);
+      throw new DomainError(error.message || "Failed to reset business day.");
+    }
   }
 }
 
@@ -434,7 +389,7 @@ export class SupabaseStateRepository implements StateRepository {
     };
   }
 
-  async getTrackerState(): Promise<TrackerState> {
+  async getTrackerState(filter?: DateFilterOptions): Promise<TrackerState> {
     const supabase = createAdminClient();
     const context = await getActiveContext(supabase);
     
@@ -475,30 +430,27 @@ export class SupabaseStateRepository implements StateRepository {
 
     let daySession: DaySession | null = null;
     let sales: SaleRecord[] = [];
-    let rewards: Array<FullCommissionReward> = [];
+    let expenses: DayExpense[] = [];
     let dayCloseSnapshot: DayCloseSnapshot | null = null;
 
     if (datedSession) {
-      const [stockRes, salesRes, rewardsRes, reopenRes, snapshotRes] = await Promise.all([
+      const [stockRes, salesRes, reopenRes, snapshotRes, expensesRes] = await Promise.all([
         supabase.from('day_stock_items').select('*').eq('day_session_id', sessionId).order('product_name_snapshot'),
         supabase.from('sales').select('*').eq('day_session_id', sessionId).order('created_at', { ascending: false }).limit(100),
-        supabase.from('full_commission_rewards').select('*, sales!inner(day_session_id)').eq('sales.day_session_id', sessionId).order('created_at', { ascending: false }).limit(100),
         supabase.from('day_reopens').select('*', { count: 'exact', head: true }).eq('day_session_id', sessionId),
         supabase.from('day_closures').select('*').eq('salesman_id', context.salesmanId).eq('business_date', datedSession.business_date).eq('status', 'ACTIVE').limit(1).maybeSingle(),
+        supabase.from('day_expenses').select('*').eq('day_session_id', sessionId).order('created_at', { ascending: true }),
       ]);
       
       sales = (salesRes.data || []).map(saleFromSupabaseRow);
-      rewards = (rewardsRes.data || []).map((row: DbRow) => ({
+      expenses = (expensesRes.data || []).map((row: DbRow) => ({
         id: String(row.id),
-        saleId: String(row.sale_id),
-        productId: String(row.product_id),
-        productName: String(row.product_name_snapshot || "Offer Reward"),
-        cycleNumber: Number(row.cycle_number),
+        daySessionId: String(row.day_session_id),
+        category: String(row.category) as "Petrol" | "Food" | "Other",
         amountPaise: Number(row.amount_paise),
+        description: row.description ? String(row.description) : undefined,
         createdAt: isoTimestamp(row.created_at),
-        receivedAt: row.received_at ? isoTimestamp(row.received_at) : null,
-        status: String(row.status || 'EARNED').toUpperCase() as "EARNED" | "RECEIVED",
-      })) as FullCommissionReward[];
+      }));
       
       daySession = {
         id: sessionId as string,
@@ -507,7 +459,7 @@ export class SupabaseStateRepository implements StateRepository {
         startedAt: isoTimestamp(datedSession.started_at),
         closedAt: datedSession.closed_at ? isoTimestamp(datedSession.closed_at) : null,
         reopenCount: Number(reopenRes.count ?? 0),
-        expenses: [],
+        expenses,
         stockItems: (stockRes.data || []).map((row: DbRow) => ({
           id: String(row.id),
           productId: String(row.product_id),
@@ -527,23 +479,71 @@ export class SupabaseStateRepository implements StateRepository {
           closureVersion: Number(snapshotRow.closure_version),
           status: String(snapshotRow.status) as "ACTIVE" | "SUPERSEDED",
           reportText: String(snapshotRow.report_text),
+          totalExpensesPaise: Number(snapshotRow.total_expenses_paise || 0),
           whatsappReportStatus: String(snapshotRow.whatsapp_report_status) as "CURRENT" | "OUTDATED",
           createdAt: isoTimestamp(snapshotRow.created_at),
         };
       }
     }
 
-    const [productsRes, historyRes] = await Promise.all([
+    let historyQuery = supabase.from('sales').select('*, day_sessions!inner(business_date)').eq('salesman_id', context.salesmanId);
+    let closuresQuery = supabase.from('day_closures').select('*').eq('salesman_id', context.salesmanId).eq('status', 'ACTIVE');
+    let rewardsQuery = supabase.from('full_commission_rewards').select('*').eq('salesman_id', context.salesmanId);
+
+    if (filter?.startDate) {
+      closuresQuery = closuresQuery.gte('business_date', filter.startDate);
+      historyQuery = historyQuery.gte('created_at', `${filter.startDate}T00:00:00.000Z`);
+      rewardsQuery = rewardsQuery.gte('created_at', `${filter.startDate}T00:00:00.000Z`);
+    }
+    if (filter?.endDate) {
+      closuresQuery = closuresQuery.lte('business_date', filter.endDate);
+      historyQuery = historyQuery.lte('created_at', `${filter.endDate}T23:59:59.999Z`);
+      rewardsQuery = rewardsQuery.lte('created_at', `${filter.endDate}T23:59:59.999Z`);
+    }
+    if (filter?.productId) {
+      historyQuery = historyQuery.eq('product_id', filter.productId);
+      rewardsQuery = rewardsQuery.eq('product_id', filter.productId);
+    }
+    if (filter?.status && filter.status !== 'ALL') {
+      rewardsQuery = rewardsQuery.eq('status', filter.status.toLowerCase());
+    }
+
+    const [productsRes, historyRes, closuresRes, rewardsRes] = await Promise.all([
       supabase.from('products')
         .select('id, name, selling_price_paise, commission_rules(normal_commission_paise, full_commission_paise, reward_threshold), commission_progress(normal_sales_completed, cycle_number)')
         .eq('active', true)
         .order('sort_order'),
-      supabase.from('sales').select('*, day_sessions!inner(business_date)').eq('salesman_id', context.salesmanId).order('created_at', { ascending: false }).limit(250),
+      historyQuery.order('created_at', { ascending: false }).limit(250),
+      closuresQuery.order('business_date', { ascending: false }).limit(100),
+      rewardsQuery.order('created_at', { ascending: false }).limit(250),
     ]);
+    
+    const rewards = (rewardsRes.data || []).map((row: DbRow) => ({
+      id: String(row.id),
+      saleId: String(row.sale_id),
+      productId: String(row.product_id),
+      productName: String(row.product_name_snapshot || "Offer Reward"),
+      cycleNumber: Number(row.cycle_number),
+      amountPaise: Number(row.amount_paise),
+      createdAt: isoTimestamp(row.created_at),
+      receivedAt: row.received_at ? isoTimestamp(row.received_at) : null,
+      status: String(row.status || 'EARNED').toUpperCase() as "EARNED" | "RECEIVED",
+    })) as FullCommissionReward[];
     
     const historySales = (historyRes.data || []).map((row: DbRow) => ({
       ...saleFromSupabaseRow(row),
       businessDate: String((row.day_sessions as DbRow)?.business_date),
+    }));
+
+    const historyClosures = (closuresRes.data || []).map((row: DbRow) => ({
+      id: String(row.id),
+      businessDate: String(row.business_date),
+      closureVersion: Number(row.closure_version || 1),
+      status: String(row.status || 'ACTIVE') as "ACTIVE" | "SUPERSEDED",
+      reportText: String(row.report_text || ""),
+      totalExpensesPaise: Number(row.total_expenses_paise || 0),
+      whatsappReportStatus: String(row.whatsapp_report_status || 'CURRENT') as "CURRENT" | "OUTDATED",
+      createdAt: isoTimestamp(row.created_at),
     }));
 
     const statusMap = {
@@ -564,6 +564,8 @@ export class SupabaseStateRepository implements StateRepository {
           hasPermission: true,
         })
       : { allowed: false, reason: "No closed Business Day is available." };
+
+    const totalExpensesPaise = expenses.reduce((sum, e) => sum + e.amountPaise, 0);
 
     return {
       settings,
@@ -586,7 +588,7 @@ export class SupabaseStateRepository implements StateRepository {
           cycleNumber: Number(cp?.cycle_number ?? 1),
          };
       }),
-      dashboard: summarizeSales(sales),
+      dashboard: summarizeSales(sales, totalExpensesPaise),
       isDayClosed: daySessionStatus === "CLOSED",
       daySession,
       daySessionStatus,
@@ -595,7 +597,8 @@ export class SupabaseStateRepository implements StateRepository {
       rewards,
       dayCloseSnapshot,
       historySales,
-      expenses: [],
+      historyClosures,
+      expenses,
       reopenEligibility,
       resetEligibility: daySession
         ? canResetBusinessDayUseCase({
@@ -608,3 +611,104 @@ export class SupabaseStateRepository implements StateRepository {
     };
   }
 }
+
+export class SupabaseExpenseRepository implements ExpenseRepository {
+  async addExpense(input: CreateExpenseInput): Promise<DayExpense> {
+    const supabase = createAdminClient();
+    const context = await getActiveContext(supabase);
+
+    const { data: session, error: sessErr } = await supabase
+      .from('day_sessions')
+      .select('status')
+      .eq('id', input.sessionId)
+      .single();
+
+    if (sessErr || !session) throw new DomainError("Business day session not found.", 404);
+    if (session.status !== 'OPEN') throw new DomainError("Expenses can only be added to an active business day.");
+
+    const { data, error } = await supabase
+      .from('day_expenses')
+      .insert({
+        tenant_id: context.tenantId,
+        company_id: context.companyId,
+        salesman_id: context.salesmanId,
+        day_session_id: input.sessionId,
+        category: input.category,
+        amount_paise: input.amountPaise,
+        description: input.description || null,
+      })
+      .select('*')
+      .single();
+
+    if (error || !data) throw new DomainError(`Failed to add expense: ${error?.message || "Unknown error"}`);
+
+    return {
+      id: String(data.id),
+      daySessionId: String(data.day_session_id),
+      category: String(data.category) as "Petrol" | "Food" | "Other",
+      amountPaise: Number(data.amount_paise),
+      description: data.description ? String(data.description) : undefined,
+      createdAt: isoTimestamp(data.created_at),
+    };
+  }
+
+  async updateExpense(expenseId: string, input: { amountPaise?: number; description?: string }): Promise<DayExpense> {
+    const supabase = createAdminClient();
+    
+    const updateData: DbRow = {};
+    if (input.amountPaise !== undefined) updateData.amount_paise = input.amountPaise;
+    if (input.description !== undefined) updateData.description = input.description || null;
+    updateData.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from('day_expenses')
+      .update(updateData)
+      .eq('id', expenseId)
+      .select('*')
+      .single();
+
+    if (error || !data) throw new DomainError(`Failed to update expense: ${error?.message || "Unknown error"}`);
+
+    return {
+      id: String(data.id),
+      daySessionId: String(data.day_session_id),
+      category: String(data.category) as "Petrol" | "Food" | "Other",
+      amountPaise: Number(data.amount_paise),
+      description: data.description ? String(data.description) : undefined,
+      createdAt: isoTimestamp(data.created_at),
+    };
+  }
+
+  async deleteExpense(expenseId: string): Promise<void> {
+    const supabase = createAdminClient();
+
+    const { error } = await supabase
+      .from('day_expenses')
+      .delete()
+      .eq('id', expenseId);
+
+    if (error) throw new DomainError(`Failed to delete expense: ${error.message}`);
+  }
+
+  async getExpenses(sessionId: string): Promise<DayExpense[]> {
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase
+      .from('day_expenses')
+      .select('*')
+      .eq('day_session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw new DomainError(`Failed to fetch expenses: ${error.message}`);
+
+    return (data || []).map((row: DbRow) => ({
+      id: String(row.id),
+      daySessionId: String(row.day_session_id),
+      category: String(row.category) as "Petrol" | "Food" | "Other",
+      amountPaise: Number(row.amount_paise),
+      description: row.description ? String(row.description) : undefined,
+      createdAt: isoTimestamp(row.created_at),
+    }));
+  }
+}
+
