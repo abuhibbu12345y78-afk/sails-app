@@ -453,7 +453,10 @@ export class SupabaseStateRepository implements StateRepository {
     }
 
     const [productsRes, historyRes] = await Promise.all([
-      supabase.from('products').select('*, commission_progress(normal_sales_completed, cycle_number)').eq('active', true).order('sort_order'),
+      supabase.from('products')
+        .select('id, name, selling_price_paise, commission_rules(normal_commission_paise, full_commission_paise, reward_threshold), commission_progress(normal_sales_completed, cycle_number)')
+        .eq('active', true)
+        .order('sort_order'),
       supabase.from('sales').select('*, day_sessions!inner(business_date)').eq('salesman_id', context.salesmanId).order('created_at', { ascending: false }).limit(250),
     ]);
     
@@ -490,13 +493,14 @@ export class SupabaseStateRepository implements StateRepository {
       },
       products: (productsRes.data || []).map((row: DbRow) => {
          const cp = Array.isArray(row.commission_progress) ? row.commission_progress[0] : null;
+         const rule = Array.isArray(row.commission_rules) ? row.commission_rules[0] : (row.commission_rules as DbRow | null);
          return {
           id: String(row.id),
           name: String(row.name),
           sellingPricePaise: Number(row.selling_price_paise),
-          normalCommissionPaise: Number(row.normal_commission_paise),
-          fullCommissionPaise: Number(row.full_commission_paise),
-          rewardThreshold: Number(row.reward_threshold),
+          normalCommissionPaise: Number(rule?.normal_commission_paise ?? 0),
+          fullCommissionPaise: Number(rule?.full_commission_paise ?? 0),
+          rewardThreshold: Number(rule?.reward_threshold ?? 12),
           progress: Number(cp?.normal_sales_completed ?? 0),
           cycleNumber: Number(cp?.cycle_number ?? 1),
          };
