@@ -1,14 +1,11 @@
-import { env } from "cloudflare:workers";
-import { drizzle } from "drizzle-orm/d1";
-import * as schema from "./schema";
+// import { env } from "cloudflare:workers";
+// import { drizzle } from "drizzle-orm/d1";
+// import * as schema from "./schema";
 
-export function getRawDb(): D1Database {
-  if (!env.DB) {
-    throw new Error("The application database is unavailable.");
-  }
-  return env.DB;
+export function getRawDb(): any {
+  throw new Error("D1 is not supported on Vercel Node runtime. Ensure DATABASE_PROVIDER=supabase is set.");
 }
 
-export function getDb() {
-  return drizzle(getRawDb(), { schema });
+export function getDb(): any {
+  throw new Error("D1 is not supported on Vercel Node runtime. Ensure DATABASE_PROVIDER=supabase is set.");
 }
