@@ -30,12 +30,15 @@ begin
   if not found then raise exception 'open_day_not_found' using errcode = 'P0002'; end if;
 
   select coalesce(jsonb_agg(jsonb_build_object(
-    'product_id', product_id, 'product', product_name_snapshot, 'picked', picked_quantity,
-    'sold', sold_quantity, 'remaining', remaining_quantity
-  ) order by product_name_snapshot), '[]'::jsonb)
-  into v_product_summary from public.day_stock_items where day_session_id = v_session.id;
+    'product_id', p.id, 'product', p.name, 'picked', coalesce(i.picked_quantity, 0),
+    'sold', coalesce(i.sold_quantity, 0), 'remaining', coalesce(i.remaining_quantity, 0)
+  ) order by p.name), '[]'::jsonb)
+  into v_product_summary
+  from public.products p
+  left join public.day_stock_items i on i.day_session_id = v_session.id and i.product_id = p.id
+  where p.company_id = v_session.company_id and p.active;
 
-  select coalesce(string_agg(format('• %s — %s sold', x->>'product', x->>'sold'), E'\n'), '-')
+  select coalesce(string_agg(format('• %s — Picked %s / Sold %s', x->>'product', x->>'picked', x->>'sold'), E'\n'), '-')
   into v_product_lines from jsonb_array_elements(v_product_summary) x;
 
   select coalesce(sum(quantity),0)::integer total_units,
@@ -323,7 +326,7 @@ begin
     ) order by product_name_snapshot), '[]'::jsonb)
     into v_product_summary from public.day_stock_items where day_session_id = v_affected_session;
 
-    select coalesce(string_agg(format('• %s — %s sold', x->>'product', x->>'sold'), E'\n'), '-')
+    select coalesce(string_agg(format('• %s — Picked %s / Sold %s', x->>'product', x->>'picked', x->>'sold'), E'\n'), '-')
     into v_product_lines from jsonb_array_elements(v_product_summary) x;
 
     select coalesce(sum(quantity),0)::integer total_units,
