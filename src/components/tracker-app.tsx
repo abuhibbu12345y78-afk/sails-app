@@ -1091,19 +1091,28 @@ function SaleScreen({ state, money, navigate, openSale, dateChanged, reload, sho
   const stockMap = new Map(state.daySession?.stockItems.map((item) => [item.productId, item]) ?? []);
   return <><PageTitle title="Record a Sale" navigate={navigate} />
     {dateChanged && <section className="warning-card"><div className="warning-title"><AlertTriangle /><div><h2>{ml.messages.calendarDateChanged}</h2><p>{ml.messages.closePreviousDayWarning}</p></div></div></section>}
-    <p className="eyebrow">{ml.messages.chooseAProduct}</p><div className="product-grid">{state.products.map((product) => {
+    <p className="eyebrow">{ml.messages.chooseAProduct}</p><div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">{state.products.map((product) => {
       const stock = stockMap.get(product.id);
       const unavailable = !stock || stock.pickedQuantity === 0 || stock.remainingQuantity === 0 || dateChanged;
-      return <button className="product-card" key={product.id} disabled={unavailable} onClick={() => openSale(product)}>
-        <span className="product-name">{product.name}</span><span className="product-price">{money(product.sellingPricePaise)}</span>
-        <span className="product-commission">{money(product.normalCommissionPaise)} Normal Commission</span>
+      return <button className="product-card w-full min-w-0 max-w-full overflow-hidden" key={product.id} disabled={unavailable} onClick={() => openSale(product)}>
+        <h3 className="min-w-0 break-words whitespace-normal text-left font-bold text-[1.05rem] leading-tight text-slate-800 mb-1">{product.name}</h3><span className="product-price">{money(product.sellingPricePaise)}</span>
+        <span className="product-commission">{money(product.normalCommissionPaise)} {ml.finance.normalCommission}</span>
         <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress === product.rewardThreshold ? <><Sparkles size={12} /> {ml.labels.nextOffer}</> : <>Cycle {product.cycleNumber}</>}</span>
         <div className="stock-strip" style={{ marginTop: '0.75rem', marginBottom: '0.2rem' }}>
           {stock ? (
             <>
-              <span>{ml.stock.picked} <strong>{stock.pickedQuantity}</strong></span>
-              <span><span className={stock.soldQuantity > 0 ? "highlight-red-bg" : ""}>{ml.stock.sold}</span> <strong className={stock.soldQuantity > 0 ? "highlight-red" : ""}>{stock.soldQuantity}</strong></span>
-              <span><span className={stock.remainingQuantity === 0 ? "highlight-red-bg" : ""}>{ml.stock.remaining}</span> <strong className={stock.remainingQuantity === 0 ? "highlight-red" : ""}>{stock.remainingQuantity}</strong></span>
+              <div className="min-w-0 text-center">
+                <span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.picked}</span>
+                <strong className="mt-1 block">{stock.pickedQuantity}</strong>
+              </div>
+              <div className="min-w-0 text-center">
+                <span className={`block whitespace-normal break-words text-xs leading-4 ${stock.soldQuantity > 0 ? "highlight-red-bg" : ""}`}>{ml.stock.sold}</span>
+                <strong className={`mt-1 block ${stock.soldQuantity > 0 ? "highlight-red" : ""}`}>{stock.soldQuantity}</strong>
+              </div>
+              <div className="min-w-0 text-center">
+                <span className={`block whitespace-normal break-words text-xs leading-4 ${stock.remainingQuantity === 0 ? "highlight-red-bg" : ""}`}>{ml.stock.remaining}</span>
+                <strong className={`mt-1 block ${stock.remainingQuantity === 0 ? "highlight-red" : ""}`}>{stock.remainingQuantity}</strong>
+              </div>
             </>
           ) : (
             <span style={{ gridColumn: 'span 3' }}>{ml.status.notPrepared}</span>
@@ -1162,7 +1171,7 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate, reload }:
     <div className="dashboard-meta"><span><Clock3 size={15} /> Last updated {clock.formatTime(new Date(state.lastUpdatedAt), false)}</span><span><Wifi size={15} /> {state.settings.realtimeEnabled ? "Live refresh enabled" : "Live refresh off"}</span></div>
     <section className="metrics">{metrics.map(({ label, value, icon: Icon, featured }) => <article className={`metric${featured ? " featured" : ""}`} key={label}><Icon className="metric-icon" size={21} /><span>{label}</span><strong>{value}</strong></article>)}</section>
     <div className="section-head"><div><h2>{ml.messages.dailyStock}</h2><p>{ml.messages.stockResetsOnlyWhenNewDayStarted}</p></div></div>
-    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><div><h3>{item.productName}</h3><p>{ml.stock.picked} {item.pickedQuantity}</p></div><span className="badge">{item.remainingQuantity} {ml.stock.remaining}</span></div><div className="stock-strip"><span>{ml.stock.picked} <strong>{item.pickedQuantity}</strong></span><span>{ml.stock.sold} <strong>{item.soldQuantity}</strong></span><span>{ml.stock.remaining} <strong>{item.remainingQuantity}</strong></span></div></article>) ?? <Empty icon={Boxes} text="Start a business day to prepare daily stock." />}</div>
+    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><div><h3>{item.productName}</h3><p>{ml.stock.picked} {item.pickedQuantity}</p></div><span className="badge">{item.remainingQuantity} {ml.stock.remaining}</span></div><div className="stock-strip"><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.picked}</span><strong className="mt-1 block">{item.pickedQuantity}</strong></div><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.sold}</span><strong className="mt-1 block">{item.soldQuantity}</strong></div><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.remaining}</span><strong className="mt-1 block">{item.remainingQuantity}</strong></div></div></article>) ?? <Empty icon={Boxes} text="Start a business day to prepare daily stock." />}</div>
     <div className="section-head"><div><h2>{ml.labels.persistentCommissionProgress}</h2><p>{ml.messages.dayStartAndCloseNeverReset}</p></div></div>
     <div className="list">{state.products.map((product) => <article className="list-card" key={product.id}><div className="list-row"><div><h3>{product.name}</h3><p>Cycle {product.cycleNumber}</p></div><span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress} / {product.rewardThreshold}</span></div><div className="progress-track" style={{ marginTop: ".75rem" }}><div className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></div></article>)}</div>
   </>;
@@ -1663,7 +1672,7 @@ function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, sh
     {state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" && <PreviousDayWarning state={state} navigate={navigate} money={money} formatTime={(date) => clock.formatTime(date, false)} />}
     <section className="session-timing"><div><span>{ml.labels.businessDate}</span><strong>{state.daySession?.businessDate ?? "Not started"}</strong></div><div><span>{ml.labels.started}</span><strong>{startedAt ? clock.formatTime(startedAt, false) : "—"}</strong></div><div><span>{ml.labels.currentTime}</span><strong>{clock.formatTime(trustedTime, false)}</strong></div><div><span>Closed</span><strong>{confirmedCloseTime ? clock.formatTime(new Date(confirmedCloseTime), false) : "Not closed"}</strong></div><div><span>{ml.labels.workingDuration}</span><strong>{startedAt ? formatWorkingDuration(startedAt, durationEnd) : "—"}</strong></div></section>
     <div className="section-head"><div><h2>{ml.labels.productWiseStockReview}</h2><p>{ml.labels.reviewStock}</p></div></div>
-    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><h3>{item.productName}</h3><span className="badge">{item.remainingQuantity} {ml.stock.remaining}</span></div><div className="stock-strip"><span>{ml.stock.picked} <strong>{item.pickedQuantity}</strong></span><span>{ml.stock.sold} <strong>{item.soldQuantity}</strong></span><span>{ml.stock.remaining} <strong>{item.remainingQuantity}</strong></span></div></article>)}</div>
+    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><h3>{item.productName}</h3><span className="badge">{item.remainingQuantity} {ml.stock.remaining}</span></div><div className="stock-strip"><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.picked}</span><strong className="mt-1 block">{item.pickedQuantity}</strong></div><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.sold}</span><strong className="mt-1 block">{item.soldQuantity}</strong></div><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.remaining}</span><strong className="mt-1 block">{item.remainingQuantity}</strong></div></div></article>)}</div>
     <section className="close-summary">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>{ml.labels.sessionSummary}</h2>
