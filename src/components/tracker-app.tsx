@@ -468,7 +468,7 @@ export function TrackerApp() {
         {screen === "additional-pickup" && <AdditionalPickupScreen {...timeProps} state={state} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "sale" && <SaleScreen state={state} money={money} navigate={navigate} openSale={openSale} dateChanged={dateChanged} reload={load} showToast={setToast} />}
         {screen === "dashboard" && <DashboardScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} />}
-        {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} reload={load} showToast={setToast} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
+        {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} reload={load} showToast={setToast} formatTimestamp={(value) => value ? `${clock.formatDate(new Date(value))} · ${clock.formatTime(new Date(value), false)}` : ""} />}
         {screen === "history" && <HistoryScreen state={state} money={money} navigate={navigate} reload={load} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
         {screen === "day-close" && <DayCloseScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "settings" && <SettingsScreen state={state} settings={state.settings} navigate={navigate} reload={load} showToast={setToast} />}
@@ -486,7 +486,7 @@ export function TrackerApp() {
               <div><h2 id="sale-title">{selectedProduct.name}</h2><p>{money(selectedProduct.sellingPricePaise)} each</p></div>
               <button className="close-button" aria-label="Close" disabled={saving} onClick={() => setSelectedProduct(null)}><X size={20} /></button>
             </div>
-            <div className="stock-strip"><span>Picked <strong>{selectedStock.pickedQuantity}</strong></span><span>Sold <strong>{selectedStock.soldQuantity}</strong></span><span>Remaining <strong>{selectedStock.remainingQuantity}</strong></span></div>
+            <div className="stock-strip"><span>{ml.stock.picked} <strong>{selectedStock.pickedQuantity}</strong></span><span>{ml.stock.sold} <strong>{selectedStock.soldQuantity}</strong></span><span>{ml.stock.remaining} <strong>{selectedStock.remainingQuantity}</strong></span></div>
             <div className="quantity" aria-label="Quantity">
               <button aria-label="Decrease quantity" onClick={() => setQuantity((value) => Math.max(1, value - 1))}><Minus /></button>
               <strong aria-live="polite">{quantity}</strong>
@@ -559,7 +559,7 @@ function PreviousDayWarning({ state, navigate, money, formatTime }: { state: Tra
   if (!state.daySession || state.daySessionStatus !== "PREVIOUS_DAY_STILL_OPEN") return null;
   return <section className="warning-card">
     <div className="warning-title"><AlertTriangle size={22} /><div><h2>Previous Business Day Is Still Open</h2><p>{state.daySession.businessDate} · {ml.labels.started} {formatTime(new Date(state.daySession.startedAt))}. Close it before starting a new business day.</p></div></div>
-    <div className="stock-summary">{state.daySession.stockItems.map((item) => <div key={item.id}><strong>{item.productName}</strong><span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span></div>)}</div>
+    <div className="stock-summary">{state.daySession.stockItems.map((item) => <div key={item.id}><strong>{item.productName}</strong><span>{ml.stock.picked} {item.pickedQuantity} · {ml.stock.sold} {item.soldQuantity} · {ml.stock.remaining} {item.remainingQuantity}</span></div>)}</div>
     <div className="warning-finance"><span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span><span>Normal Commission <strong>{money(state.dashboard.totalNormalCommissionPaise)}</strong></span><span>Offers Earned <strong>{money(state.dashboard.totalFullCommissionPaise)}</strong></span><span>Total Earnings <strong>{money(state.dashboard.totalEarningsPaise)}</strong></span><span>Net Collection <strong>{money(state.dashboard.netCollectionPaise)}</strong></span></div>
     <div className="warning-actions"><button className="secondary-button" onClick={() => navigate("dashboard")}>View Previous Day</button><button className="danger-button" onClick={() => navigate("day-close")}>Close Previous Day</button></div>
   </section>;
@@ -584,7 +584,7 @@ function PreviousOpenLanding({ state, clock, trustedTime, money, navigate }: Tim
       </div>
       <div className="stock-summary detailed-stock">{session.stockItems.map((item) => <div key={item.id}>
         <strong>{item.productName}</strong>
-        <span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span>
+        <span>{ml.stock.picked} {item.pickedQuantity} · {ml.stock.sold} {item.soldQuantity} · {ml.stock.remaining} {item.remainingQuantity}</span>
       </div>)}</div>
       <div className="warning-finance">
         <span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span>
@@ -695,7 +695,7 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
         <div><span>{ml.labels.reopened}</span><strong>{session.reopenCount} time{session.reopenCount === 1 ? "" : "s"}</strong></div>
       </div>
       <div className="stock-summary detailed-stock">{session.stockItems.map((item) => <div key={item.id}>
-        <strong>{item.productName}</strong><span>Picked {item.pickedQuantity} · Sold {item.soldQuantity} · Remaining {item.remainingQuantity}</span>
+        <strong>{item.productName}</strong><span>{ml.stock.picked} {item.pickedQuantity} · {ml.stock.sold} {item.soldQuantity} · {ml.stock.remaining} {item.remainingQuantity}</span>
       </div>)}</div>
       <div className="warning-finance">
         <span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span>
@@ -723,7 +723,7 @@ function ClosedDayLanding({ state, clock, trustedTime, money, navigate, reload, 
           <span>{ml.labels.businessDate} <strong>{session.businessDate}</strong></span>
           <span>Original Start <strong>{clock.formatTime(new Date(session.startedAt), false)}</strong></span>
           <span>Original Close <strong>{session.closedAt ? clock.formatTime(new Date(session.closedAt), false) : "—"}</strong></span>
-          <span>Total Picked <strong>{session.stockItems.reduce((sum, item) => sum + item.pickedQuantity, 0)}</strong></span>
+          <span>{ml.stock.totalPicked} <strong>{session.stockItems.reduce((sum, item) => sum + item.pickedQuantity, 0)}</strong></span>
           <span>Total Sold <strong>{state.dashboard.totalUnits}</strong></span>
           <span>Total Remaining <strong>{session.stockItems.reduce((sum, item) => sum + item.remainingQuantity, 0)}</strong></span>
           <span>Gross Sales <strong>{money(state.dashboard.grossSalesPaise)}</strong></span>
@@ -931,7 +931,7 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
       const stock = stockByProduct.get(product.id);
       const value = quantities[product.id] ?? 0;
       return <article className="pickup-card pickup-adjustment" key={product.id}>
-        <div><strong>{product.name}</strong><span>Previously Picked: {stock?.pickedQuantity ?? 0} · Sold: {stock?.soldQuantity ?? 0} · Remaining: {stock?.remainingQuantity ?? 0}</span><span className="pickup-result">{ml.labels.newTotalPicked}: {(stock?.pickedQuantity ?? 0) + value} · {ml.labels.newRemaining}: {(stock?.remainingQuantity ?? 0) + value}</span></div>
+        <div><strong>{product.name}</strong><span>{ml.stock.previouslyPicked}: {stock?.pickedQuantity ?? 0} · {ml.stock.sold}: {stock?.soldQuantity ?? 0} · {ml.stock.remaining}: {stock?.remainingQuantity ?? 0}</span><span className="pickup-result">{ml.labels.newTotalPicked}: {(stock?.pickedQuantity ?? 0) + value} · {ml.labels.newRemaining}: {(stock?.remainingQuantity ?? 0) + value}</span></div>
         <div><small>Additional Pickup</small><div className="mini-quantity"><button aria-label={`Decrease additional ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.max(0, value - 1) })}><Minus /></button><strong>{value}</strong><button aria-label={`Increase additional ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.min(9999, value + 1) })}><Plus /></button></div></div>
       </article>;
     })}</div>
@@ -943,7 +943,7 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
       <AlertDialogContent>
         <AlertDialogHeader><AlertDialogTitle>Confirm Additional Pickup?</AlertDialogTitle><AlertDialogDescription>{ml.messages.reviewNewQuantitiesBeforeSaving}</AlertDialogDescription></AlertDialogHeader>
         <div className="dialog-summary"><span>{ml.labels.businessDate} <strong>{session.businessDate}</strong></span><span>{ml.labels.totalAdditionalUnits} <strong>{totalAdditional}</strong></span></div>
-        <div className="dialog-product-list">{selected.map((item) => <span key={item.product.id}>{item.product.name}: +{item.additional}<strong>Picked {item.newPicked} · Remaining {item.newRemaining}</strong></span>)}</div>
+        <div className="dialog-product-list">{selected.map((item) => <span key={item.product.id}>{item.product.name}: +{item.additional}<strong>{ml.stock.picked} {item.newPicked} · {ml.stock.remaining} {item.newRemaining}</strong></span>)}</div>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={savingPickup}>CANCEL</AlertDialogCancel>
           <AlertDialogAction disabled={savingPickup} onClick={(event) => { event.preventDefault(); void saveAdditionalPickup(); }}>{savingPickup ? "SAVING…" : "CONFIRM ADDITIONAL PICKUP"}</AlertDialogAction>
@@ -1162,7 +1162,7 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate, reload }:
     <div className="dashboard-meta"><span><Clock3 size={15} /> Last updated {clock.formatTime(new Date(state.lastUpdatedAt), false)}</span><span><Wifi size={15} /> {state.settings.realtimeEnabled ? "Live refresh enabled" : "Live refresh off"}</span></div>
     <section className="metrics">{metrics.map(({ label, value, icon: Icon, featured }) => <article className={`metric${featured ? " featured" : ""}`} key={label}><Icon className="metric-icon" size={21} /><span>{label}</span><strong>{value}</strong></article>)}</section>
     <div className="section-head"><div><h2>{ml.messages.dailyStock}</h2><p>{ml.messages.stockResetsOnlyWhenNewDayStarted}</p></div></div>
-    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><div><h3>{item.productName}</h3><p>Picked {item.pickedQuantity}</p></div><span className="badge">{item.remainingQuantity} remaining</span></div><div className="stock-strip"><span>Picked <strong>{item.pickedQuantity}</strong></span><span>Sold <strong>{item.soldQuantity}</strong></span><span>Remaining <strong>{item.remainingQuantity}</strong></span></div></article>) ?? <Empty icon={Boxes} text="Start a business day to prepare daily stock." />}</div>
+    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><div><h3>{item.productName}</h3><p>{ml.stock.picked} {item.pickedQuantity}</p></div><span className="badge">{item.remainingQuantity} {ml.stock.remaining}</span></div><div className="stock-strip"><span>{ml.stock.picked} <strong>{item.pickedQuantity}</strong></span><span>{ml.stock.sold} <strong>{item.soldQuantity}</strong></span><span>{ml.stock.remaining} <strong>{item.remainingQuantity}</strong></span></div></article>) ?? <Empty icon={Boxes} text="Start a business day to prepare daily stock." />}</div>
     <div className="section-head"><div><h2>{ml.labels.persistentCommissionProgress}</h2><p>{ml.messages.dayStartAndCloseNeverReset}</p></div></div>
     <div className="list">{state.products.map((product) => <article className="list-card" key={product.id}><div className="list-row"><div><h3>{product.name}</h3><p>Cycle {product.cycleNumber}</p></div><span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress} / {product.rewardThreshold}</span></div><div className="progress-track" style={{ marginTop: ".75rem" }}><div className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></div></article>)}</div>
   </>;
@@ -1297,17 +1297,20 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
                 >
                   <div className="list-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
-                      <h3 style={{ margin: 0, fontSize: "1.1rem" }}>{reward.productName}</h3>
-                      <p style={{ margin: "0.25rem 0", color: "var(--muted)", fontSize: "0.85rem" }}>
-                        Cycle {reward.cycleNumber} · Earned {formatTimestamp(reward.createdAt)}
+                      <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>{reward.productName}</h3>
+                      <p style={{ margin: "0.25rem 0", color: "#0f172a", fontSize: "0.9rem", fontWeight: 750 }}>
+                        🎁 {reward.cycleNumber}-ാം {ml.offers.giftNumber} <span style={{ fontSize: "0.82rem", fontWeight: 650, color: "#334155" }}>({ml.offers.cycle} {reward.cycleNumber})</span>
+                      </p>
+                      <p style={{ margin: "0.2rem 0", color: "#1e293b", fontSize: "0.85rem", fontWeight: 650 }}>
+                        {ml.offers.earnedAt}: <strong style={{ color: "#0f172a", fontWeight: 750 }}>{formatTimestamp(reward.createdAt)}</strong>
                       </p>
                       {isReceived && reward.receivedAt && (
-                        <p style={{ margin: 0, color: "#d97706", fontSize: "0.8rem", fontWeight: 600 }}>
-                          Received at {formatTimestamp(reward.receivedAt)}
+                        <p style={{ margin: "0.2rem 0 0", color: "#b45309", fontSize: "0.85rem", fontWeight: 700 }}>
+                          {ml.offers.receivedAt}: <strong style={{ color: "#78350f" }}>{formatTimestamp(reward.receivedAt)}</strong>
                         </p>
                       )}
                       {isEarned && (
-                        <span style={{ fontSize: "0.75rem", color: "var(--primary-color)", fontWeight: 500 }}>
+                        <span style={{ display: "inline-block", marginTop: "0.25rem", fontSize: "0.8rem", color: "#047857", fontWeight: 700 }}>
                           {ml.messages.tapToMarkReceived}
                         </span>
                       )}
@@ -1383,10 +1386,10 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
           </AlertDialogHeader>
           {selectedReward && (
             <div className="dialog-summary">
-              <span>Product <strong>{selectedReward.productName}</strong></span>
-              <span>Offer Value <strong>{money(selectedReward.amountPaise)}</strong></span>
-              <span>Cycle Number <strong>Cycle {selectedReward.cycleNumber}</strong></span>
-              <span>Earned Date/Time <strong>{formatTimestamp(selectedReward.createdAt)}</strong></span>
+              <span>{ml.labels.product} <strong>{selectedReward.productName}</strong></span>
+              <span>{ml.labels.offerValue} <strong>{money(selectedReward.amountPaise)}</strong></span>
+              <span>{ml.offers.giftNumber} <strong>🎁 Gift #{selectedReward.cycleNumber} ({ml.offers.cycle} {selectedReward.cycleNumber})</strong></span>
+              <span>{ml.offers.earnedAt} <strong>{formatTimestamp(selectedReward.createdAt)}</strong></span>
             </div>
           )}
           <AlertDialogFooter>
@@ -1415,9 +1418,12 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
           </AlertDialogHeader>
           {selectedReward && (
             <div className="dialog-summary">
-              <span>Product <strong>{selectedReward.productName}</strong></span>
-              <span>Offer Value <strong>{money(selectedReward.amountPaise)}</strong></span>
-              <span>Cycle Number <strong>Cycle {selectedReward.cycleNumber}</strong></span>
+              <span>{ml.labels.product} <strong>{selectedReward.productName}</strong></span>
+              <span>{ml.labels.offerValue} <strong>{money(selectedReward.amountPaise)}</strong></span>
+              <span>{ml.offers.giftNumber} <strong>🎁 Gift #{selectedReward.cycleNumber} ({ml.offers.cycle} {selectedReward.cycleNumber})</strong></span>
+              {selectedReward.receivedAt && (
+                <span>{ml.offers.receivedAt} <strong>{formatTimestamp(selectedReward.receivedAt)}</strong></span>
+              )}
             </div>
           )}
           <AlertDialogFooter>
@@ -1656,8 +1662,8 @@ function DayCloseScreen({ state, clock, trustedTime, money, navigate, reload, sh
     {state.daySession?.status === "CLOSED" && <div className="highlight-red-bg" style={{ textAlign: "center", marginBottom: "1rem", padding: "0.75rem", borderRadius: "8px", fontSize: "1.1rem", textTransform: "uppercase", letterSpacing: "1px" }}>{ml.status.businessDayClosed}</div>}
     {state.daySessionStatus === "PREVIOUS_DAY_STILL_OPEN" && <PreviousDayWarning state={state} navigate={navigate} money={money} formatTime={(date) => clock.formatTime(date, false)} />}
     <section className="session-timing"><div><span>{ml.labels.businessDate}</span><strong>{state.daySession?.businessDate ?? "Not started"}</strong></div><div><span>{ml.labels.started}</span><strong>{startedAt ? clock.formatTime(startedAt, false) : "—"}</strong></div><div><span>{ml.labels.currentTime}</span><strong>{clock.formatTime(trustedTime, false)}</strong></div><div><span>Closed</span><strong>{confirmedCloseTime ? clock.formatTime(new Date(confirmedCloseTime), false) : "Not closed"}</strong></div><div><span>{ml.labels.workingDuration}</span><strong>{startedAt ? formatWorkingDuration(startedAt, durationEnd) : "—"}</strong></div></section>
-    <div className="section-head"><div><h2>Product-wise stock review</h2><p>Review every picked, sold, and remaining quantity.</p></div></div>
-    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><h3>{item.productName}</h3><span className="badge">{item.remainingQuantity} remaining</span></div><div className="stock-strip"><span>Picked <strong>{item.pickedQuantity}</strong></span><span>Sold <strong>{item.soldQuantity}</strong></span><span>Remaining <strong>{item.remainingQuantity}</strong></span></div></article>)}</div>
+    <div className="section-head"><div><h2>{ml.labels.productWiseStockReview}</h2><p>{ml.labels.reviewStock}</p></div></div>
+    <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><h3>{item.productName}</h3><span className="badge">{item.remainingQuantity} {ml.stock.remaining}</span></div><div className="stock-strip"><span>{ml.stock.picked} <strong>{item.pickedQuantity}</strong></span><span>{ml.stock.sold} <strong>{item.soldQuantity}</strong></span><span>{ml.stock.remaining} <strong>{item.remainingQuantity}</strong></span></div></article>)}</div>
     <section className="close-summary">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
         <h2 style={{ margin: 0 }}>{ml.labels.sessionSummary}</h2>
@@ -1937,7 +1943,7 @@ function HistoricalEntryScreen({ state, navigate, reload, showToast }: { state: 
           <div key={p.id} style={{ display: "flex", justifyContent: "space-between", marginBottom: ".5rem", paddingBottom: ".5rem", borderBottom: "1px solid var(--border)" }}>
             <span>{p.name}</span>
             <div style={{ textAlign: "right" }}>
-              <div>Picked: {pickup[p.id] || 0}</div>
+              <div>{ml.stock.picked}: {pickup[p.id] || 0}</div>
               <div><strong>Sold: {sales[p.id] || 0}</strong></div>
             </div>
           </div>

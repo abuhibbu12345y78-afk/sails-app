@@ -19,6 +19,7 @@ export const ml = {
     unitsSold: "വിറ്റ എണ്ണം",
     totalSold: "ആകെ വിറ്റത്",
     totalUnitsSold: "ആകെ വിറ്റ എണ്ണം",
+    totalPicked: "ആകെ എടുത്തത്",
     previouslyPicked: "മുമ്പ് എടുത്തത്",
     left: "ബാക്കി",
   },
@@ -164,6 +165,10 @@ export const ml = {
   offers: {
     earned: "ഓഫർ ലഭിച്ചു",
     received: "ഓഫർ സ്വീകരിച്ചു",
+    giftNumber: "ഗിഫ്റ്റ് നമ്പർ",
+    earnedAt: "ലഭിച്ച തീയതിയും സമയവും",
+    receivedAt: "സ്വീകരിച്ച തീയതിയും സമയവും",
+    cycle: "സൈക്കിൾ",
   },
   messages: {
     timeNotSynchronized: "സമയം സിൻക്രോണൈസ് ചെയ്തിട്ടില്ല",
