@@ -2,7 +2,7 @@ import type { DashboardSummary, SaleRecord } from "./contracts";
 
 export function summarizeSales(sales: SaleRecord[], expensesPaise = 0): DashboardSummary {
   const summary = sales.reduce<DashboardSummary>((total, sale) => ({
-    totalUnits: total.totalUnits + sale.quantity,
+    totalUnits: total.totalUnits + (sale.quantity - sale.returnedQuantity),
     grossSalesPaise: total.grossSalesPaise + sale.grossSalesPaise,
     totalNormalCommissionPaise: total.totalNormalCommissionPaise + sale.totalNormalCommissionPaise,
     totalFullCommissionPaise: total.totalFullCommissionPaise + sale.totalFullCommissionPaise,

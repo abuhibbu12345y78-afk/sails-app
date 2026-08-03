@@ -15,6 +15,8 @@ import type {
   HistoricalDataResult,
   CreateSaleInput, 
   CreateSaleResult,
+  ReturnSaleInput,
+  ReturnSaleResult,
   ExpenseRepository,
   CreateExpenseInput
 } from "../../application/repositories.ts";
@@ -241,6 +243,30 @@ export class SupabaseDaySessionRepository implements DaySessionRepository {
     };
   }
 
+  async correctPickup(input: import("../../application/repositories").CorrectPickupInput): Promise<import("../../application/repositories").CorrectPickupResult> {
+    const supabase = createAdminClient();
+    const context = await getActiveContext(supabase);
+    const { data, error } = await supabase.rpc("correct_additional_pickup_atomic", {
+      p_salesman_id: context.salesmanId,
+      p_audit_log_id: input.auditLogId,
+      p_product_id: input.productId,
+      p_corrected_quantity: input.correctedQuantity,
+      p_reason: input.reason,
+      p_idempotency_key: input.idempotencyKey,
+    });
+
+    if (error) {
+      if (error.message.includes('permission_denied')) throw new DomainError("Permission denied.");
+      if (error.message.includes('day_not_open')) throw new DomainError("Cannot correct pickup: Business Day is not open.", 400);
+      if (error.message.includes('product_not_found_in_pickup')) throw new DomainError("Product not found in this pickup log.", 404);
+      if (error.message.includes('exceeds_sold_quantity')) throw new DomainError("ഇതിനകം വിറ്റ അളവിനേക്കാൾ കുറവായി സ്റ്റോക്ക് തിരുത്താൻ കഴിയില്ല.", 400);
+      if (error.message.includes('invalid_quantity')) throw new DomainError("Corrected quantity must be 0 or greater.", 400);
+      throw new Error(`correct_additional_pickup_atomic failed: ${error.message}`);
+    }
+
+    return { accepted: true };
+  }
+
   async submitHistoricalData(input: HistoricalDataInput): Promise<HistoricalDataResult> {
     const supabase = createAdminClient();
     const context = await getActiveContext(supabase);
@@ -318,7 +344,34 @@ export class SupabaseSaleRepository implements SaleRepository {
        throw new Error(`create_sale_atomic failed: ${error.message}`);
     }
     
-    return { saleId: String(data.id), duplicate: false };
+    return { saleId: String(data.id),      duplicate: false,
+    };
+  }
+
+  async returnSale(input: ReturnSaleInput): Promise<ReturnSaleResult> {
+    const supabase = createAdminClient();
+    const context = await getActiveContext(supabase);
+    const { data, error } = await supabase.rpc("reverse_sale_atomic", {
+      p_salesman_id: context.salesmanId,
+      p_sale_id: input.saleId,
+      p_return_quantity: input.returnedQuantity,
+      p_reason: input.reason,
+      p_idempotency_key: input.idempotencyKey,
+    });
+
+    if (error) {
+      if (error.message.includes('permission_denied')) throw new DomainError("Permission denied.");
+      if (error.message.includes('sale_not_found')) throw new DomainError("Sale not found or already cancelled.", 404);
+      if (error.message.includes('day_not_open')) throw new DomainError("Sale cannot be returned because the day session is closed.", 400);
+      if (error.message.includes('exceeds_reversible_quantity')) throw new DomainError("Cannot return more than the reversible quantity.", 400);
+      if (error.message.includes('offer_conflict')) throw new DomainError("Sale cannot be returned because it invalidates a RECEIVED offer.", 400);
+      throw new Error(`reverse_sale_atomic failed: ${error.message}`);
+    }
+
+    return {
+      returnId: data.id,
+      returnedQuantity: input.returnedQuantity,
+    };
   }
 
   async markOfferReceived(rewardId: string): Promise<void> {
@@ -352,7 +405,7 @@ export class SupabaseSaleRepository implements SaleRepository {
   }
 }
 
-function saleFromSupabaseRow(row: DbRow): SaleRecord {
+function saleFromSupabaseRow(row: DbRow, returnsMap: Record<string, number> = {}): SaleRecord {
   return {
     id: String(row.id),
     productId: String(row.product_id),
@@ -362,6 +415,7 @@ function saleFromSupabaseRow(row: DbRow): SaleRecord {
     normalCommissionPaise: Number(row.normal_commission_paise_snapshot),
     fullCommissionPaise: Number(row.full_commission_paise_snapshot),
     rewardThreshold: Number(row.reward_threshold_snapshot),
+    returnedQuantity: returnsMap[String(row.id)] || 0,
     normalUnits: Number(row.normal_commission_units),
     fullUnits: Number(row.full_commission_units),
     grossSalesPaise: Number(row.gross_sales_paise),
@@ -435,15 +489,59 @@ export class SupabaseStateRepository implements StateRepository {
     let dayCloseSnapshot: DayCloseSnapshot | null = null;
 
     if (datedSession) {
-      const [stockRes, salesRes, reopenRes, snapshotRes, expensesRes] = await Promise.all([
+      const [stockRes, salesRes, reopenRes, snapshotRes, expensesRes, returnsRes, pickupLogsRes, pickupAdjRes] = await Promise.all([
         supabase.from('day_stock_items').select('*').eq('day_session_id', sessionId).order('product_name_snapshot'),
         supabase.from('sales').select('*').eq('day_session_id', sessionId).order('created_at', { ascending: false }).limit(100),
         supabase.from('day_reopens').select('*', { count: 'exact', head: true }).eq('day_session_id', sessionId),
         supabase.from('day_closures').select('*').eq('salesman_id', context.salesmanId).eq('business_date', datedSession.business_date).eq('status', 'ACTIVE').limit(1).maybeSingle(),
         supabase.from('day_expenses').select('*').eq('day_session_id', sessionId).order('created_at', { ascending: true }),
+        supabase.from('sale_returns').select('sale_id, returned_quantity').eq('day_session_id', sessionId),
+        supabase.from('audit_logs').select('*').eq('entity_id', sessionId).in('action', ['day.additional_pickup', 'day.started']).order('created_at', { ascending: true }),
+        supabase.from('additional_pickup_adjustments').select('*').eq('day_session_id', sessionId)
       ]);
       
-      sales = (salesRes.data || []).map(saleFromSupabaseRow);
+      const returnsMap = (returnsRes.data || []).reduce((map: Record<string, number>, row: DbRow) => {
+        const sid = String(row.sale_id);
+        map[sid] = (map[sid] || 0) + Number(row.returned_quantity);
+        return map;
+      }, {});
+
+      // Process pickups
+      const pickupAdjustments = pickupAdjRes.data || [];
+      const pickups: import("../../application/contracts").AdditionalPickupRecord[] = [];
+      
+      (pickupLogsRes.data || []).forEach((logRow: any) => {
+        const items = logRow.metadata?.items || [];
+        items.forEach((item: any) => {
+          const pid = String(item.product_id || item.productId);
+          const originalQuantity = Number(item.additional_quantity || item.additionalQuantity || item.picked_quantity || item.pickedQuantity || 0);
+          
+          let effectiveQuantity = originalQuantity;
+          let adjusted = false;
+          
+          pickupAdjustments.forEach((adjRow: any) => {
+            if (adjRow.audit_log_id === logRow.id && adjRow.product_id === pid) {
+              effectiveQuantity += Number(adjRow.adjustment_quantity);
+              adjusted = true;
+            }
+          });
+          
+          const isInitial = logRow.action === 'day.started';
+          const defaultReason = isInitial ? "ദിവസം തുടങ്ങിയപ്പോഴുള്ള സ്റ്റോക്ക്" : "";
+
+          pickups.push({
+            auditLogId: String(logRow.id),
+            productId: pid,
+            originalQuantity,
+            effectiveQuantity,
+            reason: String(logRow.metadata?.reason || defaultReason),
+            createdAt: isoTimestamp(logRow.created_at),
+            adjusted
+          });
+        });
+      });
+
+      sales = (salesRes.data || []).map(row => saleFromSupabaseRow(row, returnsMap));
       expenses = (expensesRes.data || []).map((row: DbRow) => ({
         id: String(row.id),
         daySessionId: String(row.day_session_id),
@@ -461,6 +559,7 @@ export class SupabaseStateRepository implements StateRepository {
         closedAt: datedSession.closed_at ? isoTimestamp(datedSession.closed_at) : null,
         reopenCount: Number(reopenRes.count ?? 0),
         expenses,
+        pickups,
         stockItems: (stockRes.data || []).map((row: DbRow) => ({
           id: String(row.id),
           productId: String(row.product_id),

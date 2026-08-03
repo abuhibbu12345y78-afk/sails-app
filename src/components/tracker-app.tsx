@@ -5,7 +5,7 @@ import { ml } from "../lib/ui-text-ml";
 import {
   AlertTriangle, ArrowLeft, BarChart3, Boxes, CalendarCheck, Check,
   ChevronRight, Clock3, CloudOff, Gift, History, Home, IndianRupee, Minus,
-  MoreHorizontal, Package, Play, Plus, ReceiptIndianRupee, RefreshCw, RotateCcw, Save,
+  MoreHorizontal, Package, PackagePlus, Play, Plus, ReceiptIndianRupee, RefreshCw, RotateCcw, Save,
   ShoppingBag, Sparkles, Trophy, WalletCards, Wifi, X,
 } from "lucide-react";
 import Image from "next/image";
@@ -469,7 +469,7 @@ export function TrackerApp() {
         {screen === "sale" && <SaleScreen state={state} money={money} navigate={navigate} openSale={openSale} dateChanged={dateChanged} reload={load} showToast={setToast} />}
         {screen === "dashboard" && <DashboardScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} />}
         {screen === "rewards" && <RewardsScreen state={state} money={money} navigate={navigate} reload={load} showToast={setToast} formatTimestamp={(value) => value ? `${clock.formatDate(new Date(value))} · ${clock.formatTime(new Date(value), false)}` : ""} />}
-        {screen === "history" && <HistoryScreen state={state} money={money} navigate={navigate} reload={load} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} />}
+        {screen === "history" && <HistoryScreen state={state} money={money} navigate={navigate} reload={load} formatTimestamp={(value) => clock.formatTime(new Date(value), false)} showToast={setToast} />}
         {screen === "day-close" && <DayCloseScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "settings" && <SettingsScreen state={state} settings={state.settings} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "historical-entry" && <HistoricalEntryScreen state={state} navigate={navigate} reload={load} showToast={setToast} />}
@@ -791,6 +791,7 @@ function HomeScreen({ state, clock, trustedTime, money, navigate, dateChanged, r
   }
   const actions = [
     { screen: "sale" as const, icon: ShoppingBag, title: "Sale", text: state.daySessionStatus === "OPEN" ? "Record a product sale" : "Start a day before selling" },
+    ...(state.daySessionStatus === "OPEN" ? [{ screen: "additional-pickup" as const, icon: PackagePlus, title: ml.actions.additionalPickup, text: "Add more stock to today" }] : []),
     { screen: "expenses" as const, icon: WalletCards, title: "Expenses", text: "Petrol, food & daily costs" },
     { screen: "dashboard" as const, icon: BarChart3, title: "Dashboard", text: "See session totals" },
     { screen: "rewards" as const, icon: Trophy, title: "Offers", text: "Review earned Offers" },
@@ -880,6 +881,12 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
   const [reason, setReason] = useState("Additional pickup after reopening");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [savingPickup, setSavingPickup] = useState(false);
+  const [correctPickupId, setCorrectPickupId] = useState<string | null>(null);
+  const [correctProductId, setCorrectProductId] = useState<string | null>(null);
+  const [correctQuantity, setCorrectQuantity] = useState<number>(0);
+  const [correctReason, setCorrectReason] = useState(ml.messages.defaultCorrectionReason);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+
   const session = state.daySession;
   if (!session || session.status !== "OPEN") return <section className="warning-card"><h2>{ml.messages.additionalPickupUnavailable}</h2><p>{ml.messages.reopenTrustedBusinessDayFirst}</p></section>;
   const sessionId = session.id;
@@ -925,6 +932,36 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
     }
   }
 
+  async function handleCorrection() {
+    if (savingCorrection || correctQuantity < 0 || correctReason.trim().length < 3 || !correctPickupId || !correctProductId) return;
+    setSavingCorrection(true);
+    try {
+      await api("/api/additional-pickup/correct", {
+        method: "POST",
+        body: JSON.stringify({
+          auditLogId: correctPickupId,
+          productId: correctProductId,
+          correctedQuantity: correctQuantity,
+          reason: correctReason.trim(),
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      await reload(true);
+      setCorrectPickupId(null);
+      setCorrectProductId(null);
+      showToast({ message: ml.messages.pickupCorrectionSuccess });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to correct pickup");
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
+
+  const correctionTarget = session.pickups.find(p => p.auditLogId === correctPickupId && p.productId === correctProductId);
+  const correctionStock = correctionTarget ? stockByProduct.get(correctionTarget.productId) : null;
+  const correctionAdjustment = correctionTarget ? correctQuantity - correctionTarget.effectiveQuantity : 0;
+  const correctionValid = correctionTarget && correctionStock && (correctionStock.pickedQuantity + correctionAdjustment >= correctionStock.soldQuantity);
+
   return <><PageTitle title="Add Picked Items" navigate={navigate} /><p className="landing-brand">{ml.labels.alQuwwa}</p><TimeCard state={state} clock={clock} trustedTime={trustedTime} compact />
     <div className="section-head"><div><h2>{ml.actions.additionalPickup}</h2><p>{ml.messages.originalPickupUnchanged}</p></div></div>
     <div className="pickup-list">{state.products.map((product) => {
@@ -950,6 +987,103 @@ function AdditionalPickupScreen({ state, clock, trustedTime, navigate, reload, s
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {session.pickups.length > 0 && (
+      <div style={{ marginTop: "2rem" }}>
+        <div className="section-head">
+          <div>
+            <h2>അടുത്തകാലത്തുള്ള പിക്കപ്പുകൾ</h2>
+            <p>Recent Additional Pickups</p>
+          </div>
+        </div>
+        <div className="pickup-list">
+          {session.pickups.map((pickup, index) => (
+            <article className="pickup-card" key={`${pickup.auditLogId}-${pickup.productId}-${index}`} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <strong>{state.products.find(p => p.id === pickup.productId)?.name || "Unknown"}</strong>
+                  <span style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    {new Date(pickup.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · കാരണം: {pickup.reason}
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <strong style={{ fontSize: '1.2rem' }}>+{pickup.effectiveQuantity}</strong>
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '0.5rem' }}>
+                <div>
+                  {pickup.adjusted && (
+                    <div style={{ 
+                      display: "inline-flex", 
+                      alignItems: "center", 
+                      gap: "6px", 
+                      background: "var(--danger-light, #fee2e2)", 
+                      color: "var(--danger, #dc2626)", 
+                      padding: "2px 8px", 
+                      borderRadius: "12px", 
+                      fontSize: "0.75rem", 
+                      fontWeight: 600 
+                    }}>
+                      <AlertTriangle size={12} /> തിരുത്തിയത് (ആദ്യം: {pickup.originalQuantity})
+                    </div>
+                  )}
+                </div>
+                <button className="secondary-button" style={{ padding: '4px 12px', fontSize: '0.85rem' }} onClick={() => {
+                  setCorrectPickupId(pickup.auditLogId);
+                  setCorrectProductId(pickup.productId);
+                  setCorrectQuantity(pickup.effectiveQuantity);
+                  setCorrectReason(ml.messages.defaultCorrectionReason);
+                }}>
+                  തിരുത്തുക
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {correctionTarget && correctionStock && (
+      <AlertDialog open={!!correctPickupId} onOpenChange={(open) => !open && setCorrectPickupId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>പിക്കപ്പ് തിരുത്തുക</AlertDialogTitle>
+            <AlertDialogDescription>
+              {state.products.find(p => p.id === correctionTarget.productId)?.name || "Unknown"}
+              <br />
+              <small>നിലവിലെ എണ്ണം: {correctionTarget.effectiveQuantity} · വിറ്റ എണ്ണം: {correctionStock.soldQuantity}</small>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="dialog-field pickup-reason" style={{ marginTop: '1rem' }}>
+            <label>പുതിയ എണ്ണം (Corrected Quantity)</label>
+            <div className="mini-quantity" style={{ margin: '0.5rem 0', justifyContent: 'flex-start' }}>
+              <button onClick={() => setCorrectQuantity(Math.max(0, correctQuantity - 1))}><Minus /></button>
+              <strong>{correctQuantity}</strong>
+              <button onClick={() => setCorrectQuantity(correctQuantity + 1)}><Plus /></button>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: correctionAdjustment > 0 ? 'var(--success)' : (correctionAdjustment < 0 ? 'var(--danger)' : 'var(--text-secondary)') }}>
+              വ്യത്യാസം: {correctionAdjustment > 0 ? '+' : ''}{correctionAdjustment} 
+            </p>
+            {!correctionValid && (
+              <p style={{ color: 'var(--danger)', fontSize: '0.85rem', marginTop: '0.5rem', fontWeight: 600 }}>
+                ഇതിനകം വിറ്റ അളവിനേക്കാൾ കുറവായി സ്റ്റോക്ക് തിരുത്താൻ കഴിയില്ല. (Cannot correct below already sold quantity)
+              </p>
+            )}
+          </div>
+          <div className="dialog-field pickup-reason" style={{ marginTop: '1rem' }}>
+            <label>കാരണം (Reason)</label>
+            <textarea value={correctReason} maxLength={300} onChange={(event) => setCorrectReason(event.target.value)} />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={savingCorrection}>റദ്ദാക്കുക (CANCEL)</AlertDialogCancel>
+            <AlertDialogAction disabled={savingCorrection || correctQuantity < 0 || correctReason.trim().length < 3 || !correctionValid} onClick={(event) => { event.preventDefault(); void handleCorrection(); }}>
+              {savingCorrection ? "SAVING…" : "തിരുത്തൽ സ്ഥിരീകരിക്കുക (CONFIRM)"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    )}
   </>;
 }
 
@@ -1455,12 +1589,13 @@ function RewardsScreen({ state, money, navigate, reload, showToast, formatTimest
   );
 }
 
-function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
+function HistoryScreen({ state, money, navigate, reload, formatTimestamp, showToast }: {
   state: TrackerState;
   money: (value: number) => string;
   navigate: (screen: Screen) => void;
   reload: (silentOrFilter?: boolean | DateFilterOptions) => Promise<void>;
   formatTimestamp: (value: string) => string;
+  showToast: (toast: ToastState) => void;
 }) {
   const [tab, setTab] = useState<"sales" | "closed-days">("sales");
   const [selectedClosure, setSelectedClosure] = useState<DayCloseSnapshot | null>(null);
@@ -1468,6 +1603,10 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const lastRequestRef = useRef<string>("");
+  const [returnSaleId, setReturnSaleId] = useState<string | null>(null);
+  const [returnQuantity, setReturnQuantity] = useState(1);
+  const [returnReason, setReturnReason] = useState(ml.messages.customerReturned);
+  const [returning, setReturning] = useState(false);
 
   const buildFilterOpts = useCallback((f: DateFilterValue, p: number, ps: number): DateFilterOptions => {
     const opts: DateFilterOptions = { page: p, pageSize: ps };
@@ -1496,6 +1635,31 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
 
   const salesCount = state.historySalesCount ?? state.historySales.length;
   const closuresCount = state.historyClosuresCount ?? state.historyClosures.length;
+
+  const returnTarget = state.historySales.find(s => s.id === returnSaleId);
+
+  async function handleReturnSale() {
+    if (!returnTarget || returnQuantity < 1) return;
+    setReturning(true);
+    try {
+      await api("/api/sales/return", {
+        method: "POST",
+        body: JSON.stringify({
+          saleId: returnTarget.id,
+          returnedQuantity: returnQuantity,
+          reason: returnReason,
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      });
+      setReturnSaleId(null);
+      showToast({ message: ml.messages.returnSuccess });
+      void reload(true);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to return sale");
+    } finally {
+      setReturning(false);
+    }
+  }
 
   return (
     <>
@@ -1548,9 +1712,65 @@ function HistoryScreen({ state, money, navigate, reload, formatTimestamp }: {
                       <div><span>Offer ({sale.fullUnits})</span><strong>{money(sale.totalFullCommissionPaise)}</strong></div>
                       <div><span>Net Collection</span><strong>{money(sale.netCollectionPaise)}</strong></div>
                     </div>
+                    {sale.quantity - sale.returnedQuantity > 0 && state.daySessionStatus === "OPEN" && sale.businessDate === state.daySession?.businessDate && (
+                      <div className="warning-actions" style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "0.8rem" }}>
+                        <button className="secondary-button" onClick={() => {
+                          setReturnSaleId(sale.id);
+                          setReturnQuantity(1);
+                        }}>
+                          {ml.actions.returnSale}
+                        </button>
+                      </div>
+                    )}
+                    {sale.returnedQuantity > 0 && (
+                      <div style={{ 
+                        marginTop: "0.8rem", 
+                        display: "inline-flex", 
+                        alignItems: "center", 
+                        gap: "6px", 
+                        background: "var(--danger, #dc2626)", 
+                        color: "white", 
+                        padding: "4px 10px", 
+                        borderRadius: "20px", 
+                        fontSize: "0.8rem", 
+                        fontWeight: 600 
+                      }}>
+                        <AlertTriangle size={14} /> തിരികെ എടുത്തത്: {sale.returnedQuantity}
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
+
+              {returnSaleId && returnTarget && (
+                <AlertDialog open={!!returnSaleId} onOpenChange={(open) => !open && setReturnSaleId(null)}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{ml.actions.returnSale}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Returning a sale will recalculate commission and offers. If it invalidates a received offer, it will be blocked.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <p><strong>{returnTarget.productName}</strong> (Available to return: {returnTarget.quantity - returnTarget.returnedQuantity})</p>
+                    </div>
+                    <label>
+                      <span className="label-text">{ml.labels.quantity}</span>
+                      <input type="number" className="text-input" min={1} max={returnTarget.quantity - returnTarget.returnedQuantity} value={returnQuantity} onChange={(e) => setReturnQuantity(Number(e.target.value))} />
+                    </label>
+                    <label style={{ marginTop: "1rem", display: "block" }}>
+                      <span className="label-text">Reason</span>
+                      <input type="text" className="text-input" value={returnReason} onChange={(e) => setReturnReason(e.target.value)} />
+                    </label>
+                    <AlertDialogFooter style={{ marginTop: "1.5rem" }}>
+                      <AlertDialogCancel disabled={returning} onClick={() => setReturnSaleId(null)}>{ml.actions.cancel}</AlertDialogCancel>
+                      <AlertDialogAction disabled={returning || returnQuantity < 1 || returnQuantity > (returnTarget.quantity - returnTarget.returnedQuantity) || returnReason.trim().length < 3} onClick={(event) => { event.preventDefault(); void handleReturnSale(); }}>
+                        {returning ? ml.messages.loading : ml.actions.confirm}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
 
               <Pagination
                 currentPage={page}

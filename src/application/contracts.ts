@@ -9,6 +9,7 @@ export interface SaleRecord extends CommissionCalculationResult {
   normalCommissionPaise: number;
   fullCommissionPaise: number;
   rewardThreshold: number;
+  returnedQuantity: number;
   businessDate?: string;
   createdAt: string;
 }
@@ -64,6 +65,16 @@ export interface DayExpense {
   createdAt: string;
 }
 
+export interface AdditionalPickupRecord {
+  auditLogId: string;
+  productId: string;
+  originalQuantity: number;
+  effectiveQuantity: number;
+  reason: string;
+  createdAt: string;
+  adjusted: boolean;
+}
+
 export interface DaySession {
   id: string;
   businessDate: string;
@@ -73,6 +84,7 @@ export interface DaySession {
   reopenCount: number;
   stockItems: DayStockItem[];
   expenses: DayExpense[];
+  pickups: AdditionalPickupRecord[];
 }
 
 export type DaySessionStatus = "NOT_STARTED" | "OPEN" | "PREVIOUS_DAY_STILL_OPEN" | "CLOSED";

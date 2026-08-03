@@ -40,6 +40,7 @@ function saleFromRow(row: Row): SaleRecord {
     normalCommissionPaise: Number(row.normal_commission_paise),
     fullCommissionPaise: Number(row.full_commission_paise),
     rewardThreshold: Number(row.reward_threshold),
+    returnedQuantity: 0,
     normalUnits: Number(row.normal_units),
     fullUnits: Number(row.full_units),
     grossSalesPaise: Number(row.gross_sales_paise),
@@ -198,6 +199,10 @@ export class D1DaySessionRepository implements DaySessionRepository {
       businessDate: String(session.business_date),
       closureVersion,
     };
+  }
+
+  async correctPickup(input: import("../../application/repositories").CorrectPickupInput): Promise<import("../../application/repositories").CorrectPickupResult> {
+    throw new Error("D1DaySessionRepository.correctPickup not implemented");
   }
 
   async reopenDaySession(input: ReopenDayInput): Promise<ReopenDayResult> {
@@ -438,6 +443,10 @@ export class D1SaleRepository implements SaleRepository {
     return { saleId, calculation, duplicate: false };
   }
 
+  async returnSale(input: any): Promise<any> {
+    throw new Error("returnSale is not implemented for D1.");
+  }
+
   async markOfferReceived(rewardId: string): Promise<void> {
     const db = await ensureDatabase();
     await db.prepare("UPDATE full_commission_rewards SET status = 'received' WHERE id = ?").bind(rewardId);
@@ -539,6 +548,7 @@ export class D1StateRepository implements StateRepository {
         closedAt: datedSession.closed_at ? isoTimestamp(datedSession.closed_at) : null,
         reopenCount: Number(reopenCountRow?.reopen_count ?? 0),
         expenses: [],
+        pickups: [],
         stockItems: stockResult.results.map((row: Row) => ({
           id: String(row.id),
           productId: String(row.product_id),

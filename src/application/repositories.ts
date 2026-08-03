@@ -75,11 +75,24 @@ export interface HistoricalDataResult {
   sessionId: string;
 }
 
+export interface CorrectPickupInput {
+  auditLogId: string;
+  productId: string;
+  correctedQuantity: number;
+  reason: string;
+  idempotencyKey: string;
+}
+
+export interface CorrectPickupResult {
+  accepted: boolean;
+}
+
 export interface DaySessionRepository {
   startDaySession(input: StartDayInput): Promise<StartDayResult>;
   closeDaySession(sessionId: string): Promise<CloseDayResult>;
   reopenDaySession(input: ReopenDayInput): Promise<ReopenDayResult>;
   additionalPickup(input: AdditionalPickupInput): Promise<AdditionalPickupResult>;
+  correctPickup(input: CorrectPickupInput): Promise<CorrectPickupResult>;
   submitHistoricalData(input: HistoricalDataInput): Promise<HistoricalDataResult>;
   resetBusinessDay(sessionId: string): Promise<void>;
 }
@@ -96,8 +109,21 @@ export interface CreateSaleResult {
   calculation?: CommissionCalculationResult;
 }
 
+export interface ReturnSaleInput {
+  saleId: string;
+  returnedQuantity: number;
+  reason: string;
+  idempotencyKey: string;
+}
+
+export interface ReturnSaleResult {
+  returnId: string;
+  returnedQuantity: number;
+}
+
 export interface SaleRepository {
   createSale(input: CreateSaleInput): Promise<CreateSaleResult>;
+  returnSale(input: ReturnSaleInput): Promise<ReturnSaleResult>;
   markOfferReceived(rewardId: string): Promise<void>;
   undoOfferReceived(rewardId: string): Promise<void>;
 }

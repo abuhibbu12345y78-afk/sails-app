@@ -60,6 +60,7 @@ export const ml = {
     discardDraft: "ഡ്രാഫ്റ്റ് വേണ്ടെന്നുവെക്കുക",
     selectPastBusinessDate: "പഴയ ബിസിനസ് തീയതി തിരഞ്ഞെടുക്കുക",
     cancelDraft: "ഡ്രാഫ്റ്റ് റദ്ദാക്കുക",
+    returnSale: "വിൽപ്പന തിരികെ എടുക്കുക",
   },
   status: {
     businessDayClosed: "ബിസിനസ് ദിവസം അവസാനിപ്പിച്ചു",
@@ -224,5 +225,9 @@ export const ml = {
     totalRemaining: "ആകെ ബാക്കി",
     mandatoryReopenReason: "തുറക്കാനുള്ള കാരണം",
     resetActiveBusinessDayQ: "ഇന്നത്തെ ബിസിനസ് ദിവസം റീസെറ്റ് ചെയ്യണോ?",
+    customerReturned: "ഉപഭോക്താവ് തിരികെ നൽകി",
+    returnSuccess: "വിൽപ്പന വിജയകരമായി തിരികെ എടുത്തു",
+    pickupCorrectionSuccess: "പിക്കപ്പ് വിജയകരമായി തിരുത്തി",
+    defaultCorrectionReason: "അബദ്ധത്തിൽ തെറ്റായ എണ്ണം രേഖപ്പെടുത്തി",
   }
 };
