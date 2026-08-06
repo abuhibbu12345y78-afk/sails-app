@@ -25,6 +25,7 @@ describe("Expense and Settlement Calculations", () => {
       finalProgress: 1,
       finalCycle: 1,
       fullCommissionCycles: [],
+      returnedQuantity: 0,
       createdAt: new Date().toISOString(),
     }];
 
@@ -57,6 +58,7 @@ describe("Expense and Settlement Calculations", () => {
       finalProgress: 1,
       finalCycle: 1,
       fullCommissionCycles: [],
+      returnedQuantity: 0,
       createdAt: new Date().toISOString(),
     }];
 
@@ -89,6 +91,7 @@ describe("Expense and Settlement Calculations", () => {
       finalProgress: 0,
       finalCycle: 2,
       fullCommissionCycles: [1],
+      returnedQuantity: 0,
       createdAt: new Date().toISOString(),
     }];
 
@@ -124,6 +127,7 @@ describe("Expense and Settlement Calculations", () => {
         finalProgress: 1,
         finalCycle: 1,
         fullCommissionCycles: [],
+        returnedQuantity: 0,
         createdAt: new Date().toISOString(),
       },
       {
@@ -145,6 +149,7 @@ describe("Expense and Settlement Calculations", () => {
         finalProgress: 0,
         finalCycle: 2,
         fullCommissionCycles: [1],
+        returnedQuantity: 0,
         createdAt: new Date().toISOString(),
       },
     ];

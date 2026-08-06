@@ -22,6 +22,7 @@ const schemaStatements = [
     normal_commission_paise INTEGER NOT NULL CHECK(normal_commission_paise >= 0),
     full_commission_paise INTEGER NOT NULL CHECK(full_commission_paise >= 0),
     reward_threshold INTEGER NOT NULL DEFAULT 12 CHECK(reward_threshold > 0),
+    offer_enabled INTEGER NOT NULL DEFAULT 1,
     sort_order INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1
   )`,
   `CREATE TABLE IF NOT EXISTS commission_progress (

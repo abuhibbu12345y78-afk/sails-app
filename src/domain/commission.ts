@@ -3,6 +3,7 @@ export type Money = number;
 export interface CommissionRule {
   sellingPricePaise: Money;
   normalCommissionPaise: Money;
+  offerEnabled: boolean;
   fullCommissionPaise: Money;
   rewardThreshold: number;
 }
@@ -39,15 +40,42 @@ export function calculateSale(input: CalculateSaleInput): CommissionCalculationR
   if (!Number.isSafeInteger(input.quantity) || input.quantity < 1 || input.quantity > 999) {
     throw new Error("Quantity must be a whole number between 1 and 999.");
   }
-  if (!Number.isSafeInteger(rule.rewardThreshold) || rule.rewardThreshold < 1) {
-    throw new Error("Reward threshold must be a positive whole number.");
-  }
-  if (!Number.isSafeInteger(input.currentProgress) || input.currentProgress < 0 || input.currentProgress > rule.rewardThreshold) {
-    throw new Error("Current progress is invalid.");
+  if (rule.offerEnabled) {
+    if (!Number.isSafeInteger(rule.rewardThreshold) || rule.rewardThreshold < 1) {
+      throw new Error("Reward threshold must be a positive whole number.");
+    }
+    if (!Number.isSafeInteger(input.currentProgress) || input.currentProgress < 0 || input.currentProgress > rule.rewardThreshold) {
+      throw new Error("Current progress is invalid.");
+    }
   }
   assertSafeMoney(rule.sellingPricePaise, "Selling price");
   assertSafeMoney(rule.normalCommissionPaise, "Normal commission");
-  assertSafeMoney(rule.fullCommissionPaise, "Full commission");
+  if (rule.offerEnabled) {
+    assertSafeMoney(rule.fullCommissionPaise, "Full commission");
+  }
+
+  if (!rule.offerEnabled) {
+    const grossSalesPaise = rule.sellingPricePaise * input.quantity;
+    const totalNormalCommissionPaise = rule.normalCommissionPaise * input.quantity;
+    const totalEarningsPaise = totalNormalCommissionPaise;
+    const netCollectionPaise = grossSalesPaise - totalEarningsPaise;
+    [grossSalesPaise, totalNormalCommissionPaise, totalEarningsPaise, netCollectionPaise]
+      .forEach((value) => assertSafeMoney(value, "Calculated money"));
+
+    return {
+      quantity: input.quantity,
+      normalUnits: input.quantity,
+      fullUnits: 0,
+      grossSalesPaise,
+      totalNormalCommissionPaise,
+      totalFullCommissionPaise: 0,
+      totalEarningsPaise,
+      netCollectionPaise,
+      finalProgress: 0,
+      finalCycle: 1,
+      fullCommissionCycles: [],
+    };
+  }
 
   let progress = input.currentProgress;
   let cycle = Math.max(1, input.currentCycle);

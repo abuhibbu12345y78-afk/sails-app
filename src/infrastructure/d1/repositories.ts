@@ -12,6 +12,8 @@ import {
   HistoricalDataResult,
   ReopenDayInput,
   ReopenDayResult,
+  ReturnSaleInput,
+  ReturnSaleResult,
   SaleRepository,
   SettingsRepository,
   StartDayInput,
@@ -403,13 +405,15 @@ export class D1SaleRepository implements SaleRepository {
       rule: {
         sellingPricePaise: Number(row.selling_price_paise),
         normalCommissionPaise: Number(row.normal_commission_paise),
+        offerEnabled: Number(row.offer_enabled ?? 1) === 1,
         fullCommissionPaise: Number(row.full_commission_paise),
         rewardThreshold: Number(row.reward_threshold),
       },
     });
     const saleId = crypto.randomUUID();
     const productName = String(row.name);
-    await db.batch([
+    const offerEnabled = Number(row.offer_enabled ?? 1) === 1;
+    const batchStatements = [
       db.prepare(`UPDATE day_stock_items
         SET sold_quantity = sold_quantity + ?, remaining_quantity = remaining_quantity - ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?`).bind(input.quantity, input.quantity, row.stock_item_id),
@@ -425,13 +429,15 @@ export class D1SaleRepository implements SaleRepository {
           calculation.totalEarningsPaise, calculation.netCollectionPaise),
       db.prepare("INSERT INTO day_session_sales (sale_id, day_session_id, business_date) VALUES (?, ?, ?)")
         .bind(saleId, session.id, session.business_date),
-      db.prepare(`UPDATE commission_progress
-        SET normal_sales_completed = ?, cycle_number = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE product_id = ?`).bind(calculation.finalProgress, calculation.finalCycle, input.productId),
-      ...calculation.fullCommissionCycles.map((cycleNumber) => db.prepare(
-        `INSERT INTO full_commission_rewards (id, sale_id, product_id, product_name, cycle_number, amount_paise)
-        VALUES (?, ?, ?, ?, ?, ?)`
-      ).bind(crypto.randomUUID(), saleId, input.productId, productName, cycleNumber, Number(row.full_commission_paise))),
+      ...(offerEnabled ? [
+        db.prepare(`UPDATE commission_progress
+          SET normal_sales_completed = ?, cycle_number = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE product_id = ?`).bind(calculation.finalProgress, calculation.finalCycle, input.productId),
+        ...calculation.fullCommissionCycles.map((cycleNumber) => db.prepare(
+          `INSERT INTO full_commission_rewards (id, sale_id, product_id, product_name, cycle_number, amount_paise)
+          VALUES (?, ?, ?, ?, ?, ?)`
+        ).bind(crypto.randomUUID(), saleId, input.productId, productName, cycleNumber, Number(row.full_commission_paise))),
+      ] : []),
       db.prepare(`INSERT INTO audit_logs (id, action, entity_type, entity_id, metadata_json)
         VALUES (?, 'sale.created', 'sale', ?, ?)`)
         .bind(crypto.randomUUID(), saleId, JSON.stringify({
@@ -439,11 +445,12 @@ export class D1SaleRepository implements SaleRepository {
           productId: input.productId,
           quantity: input.quantity,
         })),
-    ]);
+    ];
+    await db.batch(batchStatements);
     return { saleId, calculation, duplicate: false };
   }
 
-  async returnSale(input: any): Promise<any> {
+  async returnSale(_input: ReturnSaleInput): Promise<ReturnSaleResult> {
     throw new Error("returnSale is not implemented for D1.");
   }
 
@@ -615,11 +622,15 @@ export class D1StateRepository implements StateRepository {
     return {
       products: productsResult.results.map((row: Row) => ({
         id: String(row.id),
+        code: String(row.code ?? ""),
         name: String(row.name),
         sellingPricePaise: Number(row.selling_price_paise),
         normalCommissionPaise: Number(row.normal_commission_paise),
+        offerEnabled: Number(row.offer_enabled ?? 1) === 1,
         fullCommissionPaise: Number(row.full_commission_paise),
         rewardThreshold: Number(row.reward_threshold),
+        active: Number(row.active ?? 1) === 1,
+        sortOrder: Number(row.sort_order ?? 0),
         progress: Number(row.normal_sales_completed),
         cycleNumber: Number(row.cycle_number),
       })),

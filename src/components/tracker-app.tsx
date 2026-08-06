@@ -23,12 +23,13 @@ import { calculateSale, formatCurrency } from "../domain/commission";
 import { isDateChangeWarning } from "../domain/day-session";
 import type { Product } from "../domain/products";
 import { useTrustedClock } from "../hooks/use-trusted-clock";
+import { ProductManagementScreen } from "./product-management";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "./ui/alert-dialog";
 
-type Screen = "home" | "start-day" | "additional-pickup" | "sale" | "dashboard" | "rewards" | "history" | "day-close" | "settings" | "historical-entry" | "expenses";
+type Screen = "home" | "start-day" | "additional-pickup" | "sale" | "dashboard" | "rewards" | "history" | "day-close" | "settings" | "historical-entry" | "expenses" | "product-management";
 type ToastState = { message: string; error?: boolean } | null;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -474,6 +475,7 @@ export function TrackerApp() {
         {screen === "settings" && <SettingsScreen state={state} settings={state.settings} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "historical-entry" && <HistoricalEntryScreen state={state} navigate={navigate} reload={load} showToast={setToast} />}
         {screen === "expenses" && <ExpenseScreen {...timeProps} state={state} money={money} navigate={navigate} reload={load} showToast={setToast} />}
+        {screen === "product-management" && <><PageTitle title={ml.products.manageProducts} navigate={navigate} /><ProductManagementScreen locale={locale} currency={state.settings.currency} showToast={setToast} /></>}
       </main>
       {screen !== "additional-pickup" && <BottomNav screen={screen} navigate={navigate} />}
       {selectedProduct && preview && selectedStock && (
@@ -495,10 +497,12 @@ export function TrackerApp() {
             <div className="review">
               <div className="review-row"><span>Gross Sales</span><strong>{money(preview.grossSalesPaise)}</strong></div>
               <div className="review-row"><span>Normal Commission ({preview.normalUnits})</span><strong>{money(preview.totalNormalCommissionPaise)}</strong></div>
-              <div className="review-row"><span>Offers Earned ({preview.fullUnits})</span><strong>{money(preview.totalFullCommissionPaise)}</strong></div>
+              {selectedProduct.offerEnabled && <div className="review-row"><span>Offers Earned ({preview.fullUnits})</span><strong>{money(preview.totalFullCommissionPaise)}</strong></div>}
               <div className="review-row total"><span>Total Earnings</span><strong>{money(preview.totalEarningsPaise)}</strong></div>
               <div className="review-row"><span>Net Collection</span><strong>{money(preview.netCollectionPaise)}</strong></div>
-              <div className="review-row"><span>Final Commission Progress</span><strong>{preview.finalProgress} / {selectedProduct.rewardThreshold}</strong></div>
+              {selectedProduct.offerEnabled
+                ? <div className="review-row"><span>Final Commission Progress</span><strong>{preview.finalProgress} / {selectedProduct.rewardThreshold}</strong></div>
+                : <div className="review-row"><span>{ml.products.offerAvailable}</span><strong>{ml.products.normalCommissionOnly}</strong></div>}
             </div>
             <button className="primary-button full-width" disabled={saving || quantity > selectedStock.remainingQuantity} onClick={() => void saveSale()}>
               {saving ? <><div className="spinner" /> Saving…</> : <><Save size={19} /> Save Sale</>}
@@ -848,7 +852,9 @@ function StartDayScreen({ state, clock, trustedTime, navigate, reload, showToast
     <div className="section-head"><div><h2>{ml.messages.selectTodaysPickedQuantities}</h2><p>{ml.messages.productsLeftAt0NotPicked}</p></div></div>
     <div className="pickup-list">{state.products.map((product) => {
       const value = quantities[product.id] ?? 0;
-      return <article className="pickup-card" key={product.id}><div><strong>{product.name}</strong><span>Commission progress continues at {product.progress} / {product.rewardThreshold}</span></div><div className="mini-quantity"><button aria-label={`Decrease ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.max(0, value - 1) })}><Minus /></button><strong>{value}</strong><button aria-label={`Increase ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.min(9999, value + 1) })}><Plus /></button></div></article>;
+      return <article className="pickup-card" key={product.id}><div><strong>{product.name}</strong>{product.offerEnabled
+        ? <span>Commission progress continues at {product.progress} / {product.rewardThreshold}</span>
+        : <span>{ml.products.normalCommissionOnly}</span>}</div><div className="mini-quantity"><button aria-label={`Decrease ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.max(0, value - 1) })}><Minus /></button><strong>{value}</strong><button aria-label={`Increase ${product.name}`} onClick={() => setQuantities({ ...quantities, [product.id]: Math.min(9999, value + 1) })}><Plus /></button></div></article>;
     })}</div>
     <button className="primary-button full-width sticky-action" disabled={!canStart || !clock.synchronized || starting} onClick={() => setConfirmOpen(true)}><Play size={19} />{clock.synchronized ? "CONFIRM & START DAY" : "Waiting for trusted time"}</button>
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -1231,7 +1237,9 @@ function SaleScreen({ state, money, navigate, openSale, dateChanged, reload, sho
       return <button className="product-card w-full min-w-0 max-w-full overflow-hidden" key={product.id} disabled={unavailable} onClick={() => openSale(product)}>
         <h3 className="min-w-0 break-words whitespace-normal text-left font-bold text-[1.05rem] leading-tight text-slate-800 mb-1">{product.name}</h3><span className="product-price">{money(product.sellingPricePaise)}</span>
         <span className="product-commission">{money(product.normalCommissionPaise)} {ml.finance.normalCommission}</span>
-        <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress === product.rewardThreshold ? <><Sparkles size={12} /> {ml.labels.nextOffer}</> : <>Cycle {product.cycleNumber}</>}</span>
+        {product.offerEnabled
+          ? <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress === product.rewardThreshold ? <><Sparkles size={12} /> {ml.labels.nextOffer}</> : <>Cycle {product.cycleNumber}</>}</span>
+          : <span className="badge">{ml.products.normalCommissionOnly}</span>}
         <div className="stock-strip" style={{ marginTop: '0.75rem', marginBottom: '0.2rem' }}>
           {stock ? (
             <>
@@ -1252,8 +1260,10 @@ function SaleScreen({ state, money, navigate, openSale, dateChanged, reload, sho
             <span style={{ gridColumn: 'span 3' }}>{ml.status.notPrepared}</span>
           )}
         </div>
-        <span className="progress-row"><span>{ml.labels.commissionProgress}</span><strong>{product.progress} / {product.rewardThreshold}</strong></span>
-        <span className="progress-track"><span className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></span>
+        {product.offerEnabled && <>
+          <span className="progress-row"><span>{ml.labels.commissionProgress}</span><strong>{product.progress} / {product.rewardThreshold}</strong></span>
+          <span className="progress-track"><span className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></span>
+        </>}
       </button>;
     })}</div></>;
 }
@@ -1307,7 +1317,11 @@ function DashboardScreen({ state, clock, trustedTime, money, navigate, reload }:
     <div className="section-head"><div><h2>{ml.messages.dailyStock}</h2><p>{ml.messages.stockResetsOnlyWhenNewDayStarted}</p></div></div>
     <div className="list">{state.daySession?.stockItems.map((item) => <article className="list-card" key={item.id}><div className="list-row"><div><h3>{item.productName}</h3><p>{ml.stock.picked} {item.pickedQuantity}</p></div><span className="badge">{item.remainingQuantity} {ml.stock.remaining}</span></div><div className="stock-strip"><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.picked}</span><strong className="mt-1 block">{item.pickedQuantity}</strong></div><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.sold}</span><strong className="mt-1 block">{item.soldQuantity}</strong></div><div className="min-w-0 text-center"><span className="block whitespace-normal break-words text-xs leading-4">{ml.stock.remaining}</span><strong className="mt-1 block">{item.remainingQuantity}</strong></div></div></article>) ?? <Empty icon={Boxes} text="Start a business day to prepare daily stock." />}</div>
     <div className="section-head"><div><h2>{ml.labels.persistentCommissionProgress}</h2><p>{ml.messages.dayStartAndCloseNeverReset}</p></div></div>
-    <div className="list">{state.products.map((product) => <article className="list-card" key={product.id}><div className="list-row"><div><h3>{product.name}</h3><p>Cycle {product.cycleNumber}</p></div><span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress} / {product.rewardThreshold}</span></div><div className="progress-track" style={{ marginTop: ".75rem" }}><div className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></div></article>)}</div>
+    <div className="list">{state.products.map((product) => <article className="list-card" key={product.id}><div className="list-row"><div><h3>{product.name}</h3>{product.offerEnabled
+      ? <p>Cycle {product.cycleNumber}</p>
+      : <p>{ml.products.normalCommissionOnly}</p>}</div>{product.offerEnabled
+        ? <span className={`badge${product.progress === product.rewardThreshold ? " ready" : ""}`}>{product.progress} / {product.rewardThreshold}</span>
+        : <span className="badge">{ml.products.noOffer}</span>}</div>{product.offerEnabled && <div className="progress-track" style={{ marginTop: ".75rem" }}><div className="progress-fill" style={{ width: `${product.progress / product.rewardThreshold * 100}%` }} /></div>}</article>)}</div>
   </>;
 }
 
@@ -1999,6 +2013,10 @@ function SettingsScreen({ state, settings, navigate, reload, showToast }: { stat
     <div style={{ marginTop: "2rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       <button className="secondary-button full-width" onClick={() => navigate("historical-entry")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
         <CalendarCheck size={19} /> Previous Business Data
+      </button>
+
+      <button className="secondary-button full-width" onClick={() => navigate("product-management")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+        <Package size={19} /> {ml.products.manageProducts}
       </button>
 
       {canResetActiveDay && (

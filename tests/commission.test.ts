@@ -5,6 +5,7 @@ import { calculateSale } from "../src/domain/commission.ts";
 const rule = {
   sellingPricePaise: 50_000,
   normalCommissionPaise: 5_000,
+  offerEnabled: true,
   fullCommissionPaise: 50_000,
   rewardThreshold: 12,
 };
@@ -60,5 +61,33 @@ describe("commission calculation", () => {
   it("rejects invalid quantities and progress", () => {
     assert.throws(() => calculate(0, 0), /Quantity/);
     assert.throws(() => calculate(13, 1), /progress/);
+  });
+
+  describe("products without an offer", () => {
+    const noOfferRule = {
+      sellingPricePaise: 40_000,
+      normalCommissionPaise: 4_000,
+      offerEnabled: false,
+      fullCommissionPaise: 0,
+      rewardThreshold: 0,
+    };
+
+    it("awards Normal Commission only, with no cycle", () => {
+      const result = calculateSale({ quantity: 5, currentProgress: 0, currentCycle: 1, rule: noOfferRule });
+      assert.deepEqual(
+        [result.normalUnits, result.fullUnits, result.finalProgress, result.finalCycle],
+        [5, 0, 0, 1],
+      );
+      assert.equal(result.totalNormalCommissionPaise, 20_000);
+      assert.equal(result.totalFullCommissionPaise, 0);
+      assert.equal(result.grossSalesPaise, 200_000);
+      assert.equal(result.netCollectionPaise, 180_000);
+      assert.deepEqual(result.fullCommissionCycles, []);
+    });
+
+    it("is immune to stale progress values", () => {
+      const result = calculateSale({ quantity: 3, currentProgress: 11, currentCycle: 7, rule: noOfferRule });
+      assert.deepEqual([result.normalUnits, result.fullUnits, result.finalProgress], [3, 0, 0]);
+    });
   });
 });

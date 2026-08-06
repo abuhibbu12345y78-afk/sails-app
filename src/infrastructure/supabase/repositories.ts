@@ -18,7 +18,12 @@ import type {
   ReturnSaleInput,
   ReturnSaleResult,
   ExpenseRepository,
-  CreateExpenseInput
+  CreateExpenseInput,
+  ProductManagementRepository,
+  ProductManagementItem,
+  UpsertProductInput,
+  DeleteProductResult,
+  ProductUsage
 } from "../../application/repositories.ts";
 import type {
   TrackerState,
@@ -510,16 +515,17 @@ export class SupabaseStateRepository implements StateRepository {
       const pickupAdjustments = pickupAdjRes.data || [];
       const pickups: import("../../application/contracts").AdditionalPickupRecord[] = [];
       
-      (pickupLogsRes.data || []).forEach((logRow: any) => {
-        const items = logRow.metadata?.items || [];
-        items.forEach((item: any) => {
+      (pickupLogsRes.data || []).forEach((logRow: DbRow) => {
+        const metadata = (logRow.metadata ?? {}) as DbRow;
+        const items = (metadata.items ?? []) as DbRow[];
+        items.forEach((item: DbRow) => {
           const pid = String(item.product_id || item.productId);
           const originalQuantity = Number(item.additional_quantity || item.additionalQuantity || item.picked_quantity || item.pickedQuantity || 0);
           
           let effectiveQuantity = originalQuantity;
           let adjusted = false;
           
-          pickupAdjustments.forEach((adjRow: any) => {
+          pickupAdjustments.forEach((adjRow: DbRow) => {
             if (adjRow.audit_log_id === logRow.id && adjRow.product_id === pid) {
               effectiveQuantity += Number(adjRow.adjustment_quantity);
               adjusted = true;
@@ -534,7 +540,7 @@ export class SupabaseStateRepository implements StateRepository {
             productId: pid,
             originalQuantity,
             effectiveQuantity,
-            reason: String(logRow.metadata?.reason || defaultReason),
+            reason: String(metadata.reason || defaultReason),
             createdAt: isoTimestamp(logRow.created_at),
             adjusted
           });
@@ -647,8 +653,9 @@ export class SupabaseStateRepository implements StateRepository {
 
     const [productsRes, historyRes, closuresRes, rewardsRes, historyCountRes, closuresCountRes, rewardsCountRes] = await Promise.all([
       supabase.from('products')
-        .select('id, name, selling_price_paise, commission_rules(normal_commission_paise, full_commission_paise, reward_threshold), commission_progress(normal_sales_completed, cycle_number)')
+        .select('id, code, name, selling_price_paise, active, sort_order, commission_rules(offer_enabled, normal_commission_paise, full_commission_paise, reward_threshold), commission_progress(normal_sales_completed, cycle_number)')
         .eq('active', true)
+        .is('commission_rules.valid_to', null)
         .order('sort_order'),
       historyQuery.order('created_at', { ascending: false }),
       closuresQuery.order('business_date', { ascending: false }),
@@ -740,11 +747,15 @@ export class SupabaseStateRepository implements StateRepository {
          const rule = Array.isArray(row.commission_rules) ? row.commission_rules[0] : (row.commission_rules as DbRow | null);
          return {
           id: String(row.id),
+          code: String(row.code ?? ""),
           name: String(row.name),
           sellingPricePaise: Number(row.selling_price_paise),
           normalCommissionPaise: Number(rule?.normal_commission_paise ?? 0),
+          offerEnabled: rule?.offer_enabled !== false,
           fullCommissionPaise: Number(rule?.full_commission_paise ?? 0),
-          rewardThreshold: Number(rule?.reward_threshold ?? 12),
+          rewardThreshold: Number(rule?.reward_threshold ?? 0),
+          active: row.active !== false,
+          sortOrder: Number(row.sort_order ?? 0),
           progress: Number(cp?.normal_sales_completed ?? 0),
           cycleNumber: Number(cp?.cycle_number ?? 1),
          };
@@ -874,6 +885,136 @@ export class SupabaseExpenseRepository implements ExpenseRepository {
       description: row.description ? String(row.description) : undefined,
       createdAt: isoTimestamp(row.created_at),
     }));
+  }
+}
+
+function productUsageFromRow(row: DbRow): ProductUsage {
+  const usage = (row.usage ?? {}) as DbRow;
+  return {
+    sales: Number(usage.sales ?? 0),
+    stockItems: Number(usage.stock_items ?? 0),
+    progress: Number(usage.progress ?? 0),
+    rewards: Number(usage.rewards ?? 0),
+    closures: Number(usage.closures ?? 0),
+    auditLogs: Number(usage.audit_logs ?? 0),
+  };
+}
+
+function productManagementItemFromRow(row: DbRow): ProductManagementItem {
+  return {
+    id: String(row.id),
+    code: String(row.code ?? ""),
+    name: String(row.name),
+    sellingPricePaise: Number(row.selling_price_paise ?? 0),
+    normalCommissionPaise: Number(row.normal_commission_paise ?? 0),
+    offerEnabled: row.offer_enabled !== false,
+    fullCommissionPaise: Number(row.full_commission_paise ?? 0),
+    rewardThreshold: Number(row.reward_threshold ?? 0),
+    active: row.active !== false,
+    sortOrder: Number(row.sort_order ?? 0),
+    createdAt: isoTimestamp(row.created_at),
+    ruleId: row.rule_id ? String(row.rule_id) : null,
+    ruleValidFrom: row.rule_valid_from ? isoTimestamp(row.rule_valid_from) : null,
+    usage: productUsageFromRow(row),
+  };
+}
+
+export class SupabaseProductManagementRepository implements ProductManagementRepository {
+  async listProducts(): Promise<ProductManagementItem[]> {
+    const supabase = createAdminClient();
+    const context = await getActiveContext(supabase);
+
+    const { data, error } = await supabase.rpc("list_product_management_atomic", {
+      p_company_id: context.companyId,
+    });
+
+    if (error) throw new DomainError(`Failed to list products: ${error.message}`);
+    return ((data as unknown as DbRow[]) ?? []).map((row: DbRow) => productManagementItemFromRow(row));
+  }
+
+  async upsertProduct(input: UpsertProductInput): Promise<ProductManagementItem> {
+    const supabase = createAdminClient();
+    const context = await getActiveContext(supabase);
+
+    const { data, error } = await supabase.rpc("upsert_product_atomic", {
+      p_product_id: input.productId ?? null,
+      p_tenant_id: context.tenantId,
+      p_company_id: context.companyId,
+      p_name: input.name,
+      p_selling_price_paise: input.sellingPricePaise,
+      p_normal_commission_paise: input.normalCommissionPaise,
+      p_offer_enabled: input.offerEnabled,
+      p_full_commission_paise: input.fullCommissionPaise,
+      p_reward_threshold: input.rewardThreshold,
+      p_active: input.active,
+      p_sort_order: input.sortOrder,
+      p_reason: input.reason ?? null,
+    });
+
+    if (error || !data) {
+      if (error?.message?.includes("product_not_found")) {
+        throw new DomainError("Product not found.", 404);
+      }
+      throw new DomainError(`Failed to save product: ${error?.message || "Unknown error"}`);
+    }
+
+    const row = data as unknown as DbRow;
+    return {
+      id: String(row.id),
+      code: String(row.code ?? ""),
+      name: String(row.name),
+      sellingPricePaise: Number(row.selling_price_paise ?? 0),
+      normalCommissionPaise: input.normalCommissionPaise,
+      offerEnabled: input.offerEnabled,
+      fullCommissionPaise: input.fullCommissionPaise ?? 0,
+      rewardThreshold: input.rewardThreshold ?? 0,
+      active: row.active !== false,
+      sortOrder: Number(row.sort_order ?? 0),
+      createdAt: isoTimestamp(row.created_at),
+      ruleId: null,
+      ruleValidFrom: null,
+      usage: { sales: 0, stockItems: 0, progress: 0, rewards: 0, closures: 0, auditLogs: 0 },
+    };
+  }
+
+  async deleteProduct(productId: string, reason?: string): Promise<DeleteProductResult> {
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase.rpc("delete_product_atomic", {
+      p_product_id: productId,
+      p_reason: reason ?? null,
+    });
+
+    if (error || !data) {
+      if (error?.message?.includes("product_not_found")) {
+        throw new DomainError("Product not found.", 404);
+      }
+      throw new DomainError(`Failed to delete product: ${error?.message || "Unknown error"}`);
+    }
+
+    const result = data as unknown as {
+      deleted: boolean;
+      blocked: boolean;
+      sales: number;
+      stock_items: number;
+      progress: number;
+      rewards: number;
+      closures: number;
+      audit_logs: number;
+    };
+
+    return {
+      deleted: Boolean(result.deleted),
+      blocked: Boolean(result.blocked),
+      usage: {
+        sales: Number(result.sales ?? 0),
+        stockItems: Number(result.stock_items ?? 0),
+        progress: Number(result.progress ?? 0),
+        rewards: Number(result.rewards ?? 0),
+        closures: Number(result.closures ?? 0),
+        auditLogs: Number(result.audit_logs ?? 0),
+      },
+    };
   }
 }
 

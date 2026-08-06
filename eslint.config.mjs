@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Legacy one-off scripts / stubs not part of the shipped app:
     "scratch/**",
     "apply_fixes.cjs",
+    "apply_recent_migrations.cjs",
+    "translate.js",
     "supabase_verify.mjs",
     ".test-dist/**",
     "tests/db_audit.cjs",

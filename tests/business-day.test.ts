@@ -75,7 +75,7 @@ describe("manual day transition", () => {
       quantity: 1,
       currentProgress: 8,
       currentCycle: 2,
-      rule: { sellingPricePaise: 50_000, normalCommissionPaise: 5_000, fullCommissionPaise: 50_000, rewardThreshold: 12 },
+      rule: { sellingPricePaise: 50_000, normalCommissionPaise: 5_000, offerEnabled: true, fullCommissionPaise: 50_000, rewardThreshold: 12 },
     });
     assert.equal(stock.remainingQuantity, 6);
     assert.equal(commission.finalProgress, 9);

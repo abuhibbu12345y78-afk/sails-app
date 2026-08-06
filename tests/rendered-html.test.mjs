@@ -29,7 +29,7 @@ test("renders the AL QUWWA Business Day product", async () => {
   assert.match(app, /Server time synchronized/);
   assert.match(app, /home-summary-card/);
   assert.match(app, /\/profile\.webp/);
-  assert.match(app, /Persistent Commission Progress/);
+  assert.match(app, /ml\.labels\.persistentCommissionProgress/);
   assert.match(app, /Save Sale/);
   assert.match(css, /--primary:/);
   assert.match(css, /\.bottom-nav/);

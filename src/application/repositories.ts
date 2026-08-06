@@ -154,10 +154,62 @@ export interface ExpenseRepository {
   getExpenses(sessionId: string): Promise<DayExpense[]>;
 }
 
+export interface ProductUsage {
+  sales: number;
+  stockItems: number;
+  progress: number;
+  rewards: number;
+  closures: number;
+  auditLogs: number;
+}
+
+export interface ProductManagementItem {
+  id: string;
+  code: string;
+  name: string;
+  sellingPricePaise: number;
+  normalCommissionPaise: number;
+  offerEnabled: boolean;
+  fullCommissionPaise: number;
+  rewardThreshold: number;
+  active: boolean;
+  sortOrder: number;
+  createdAt: string;
+  ruleId: string | null;
+  ruleValidFrom: string | null;
+  usage: ProductUsage;
+}
+
+export interface UpsertProductInput {
+  productId?: string | null;
+  name: string;
+  sellingPricePaise: number;
+  normalCommissionPaise: number;
+  offerEnabled: boolean;
+  fullCommissionPaise: number | null;
+  rewardThreshold: number | null;
+  active: boolean;
+  sortOrder: number;
+  reason?: string;
+}
+
+export interface DeleteProductResult {
+  deleted: boolean;
+  blocked: boolean;
+  usage: ProductUsage;
+}
+
+export interface ProductManagementRepository {
+  listProducts(): Promise<ProductManagementItem[]>;
+  upsertProduct(input: UpsertProductInput): Promise<ProductManagementItem>;
+  deleteProduct(productId: string, reason?: string): Promise<DeleteProductResult>;
+}
+
 export interface DatabaseProvider {
   daySession: DaySessionRepository;
   sale: SaleRepository;
   settings: SettingsRepository;
   state: StateRepository;
   expense: ExpenseRepository;
+  productManagement: ProductManagementRepository;
 }
